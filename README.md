@@ -1,8 +1,8 @@
-# LiveCue
+# LiveCue Talkback
 
 **An open-source ProdCom alternative for macOS.**
 
-LiveCue is a real-time speech-to-text transcription and show-control automation application designed for live entertainment production, broadcast, theater, and corporate events. It listens to multi-channel audio feeds (from USB/Thunderbolt interfaces or **Dante Virtual Soundcard**) and triggers network MIDI cues (to QLab, ETC Eos, grandMA, etc.) based on spoken keywords and phrases.
+LiveQ is a real-time speech-to-text transcription and show-control automation application designed for live entertainment production, broadcast, theater, and corporate events. It listens to multi-channel audio feeds (from USB/Thunderbolt interfaces or **Dante Virtual Soundcard**) and triggers network MIDI cues (to QLab, ETC Eos, grandMA, etc.) based on spoken keywords and phrases.
 
 ---
 
