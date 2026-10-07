@@ -1,16 +1,63 @@
 import AVFoundation
 import SwiftUI
 
-struct TalkbackApp: App {
+struct LiveCueApp: App {
+    @State private var model = Model()
+
     var body: some Scene {
-        WindowGroup("Talkback") {
-            ContentView()
+        WindowGroup {
+            ContentView(model: model)
+                .onOpenURL { url in
+                    model.openURL(url)
+                }
+        }
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("New Session") {
+                    model.newSession()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+
+                Button("Open…") {
+                    model.openFile()
+                }
+                .keyboardShortcut("o", modifiers: .command)
+
+                Menu("Open Recent") {
+                    if model.recentDocumentURLs.isEmpty {
+                        Text("No Recent Sessions")
+                    } else {
+                        ForEach(model.recentDocumentURLs, id: \.self) { url in
+                            Button(url.deletingPathExtension().lastPathComponent) {
+                                model.openURL(url)
+                            }
+                        }
+                        Divider()
+                        Button("Clear Menu") {
+                            model.clearRecentDocuments()
+                        }
+                    }
+                }
+            }
+
+            CommandGroup(replacing: .saveItem) {
+                Button("Save") {
+                    model.save()
+                }
+                .keyboardShortcut("s", modifiers: .command)
+
+                Button("Save As…") {
+                    model.saveAs()
+                }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+            }
         }
     }
 }
 
-/// `Talkback --file speech.wav [channel]` runs a sound file through the same
+/// `LiveCue --file speech.wav [channel]` runs a sound file through the same
 /// path as the live input and prints what was heard. No microphone, no window.
+@MainActor
 func checkFile(_ path: String, channel: Int) async -> Int32 {
     do {
         let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
@@ -40,5 +87,5 @@ if let flag = arguments.firstIndex(of: "--file"), arguments.count > flag + 1 {
     }
     dispatchMain()
 } else {
-    TalkbackApp.main()
+    LiveCueApp.main()
 }

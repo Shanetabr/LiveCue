@@ -2,13 +2,13 @@
 import PackageDescription
 
 let package = Package(
-    name: "Talkback",
+    name: "LiveCue",
     platforms: [.macOS("26.0")],
     targets: [
         .executableTarget(
-            name: "Talkback",
+            name: "LiveCue",
             path: "Sources/Talkback",
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            swiftSettings: [.swiftLanguageMode(.v6)]
         )
     ]
 )

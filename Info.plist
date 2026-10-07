@@ -3,26 +3,70 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>Talkback</string>
+	<string>LiveCue</string>
 	<key>CFBundleDisplayName</key>
-	<string>Talkback</string>
+	<string>LiveCue</string>
 	<key>CFBundleIdentifier</key>
-	<string>local.talkback.app</string>
+	<string>local.livecue.app</string>
 	<key>CFBundleExecutable</key>
-	<string>Talkback</string>
+	<string>LiveCue</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Talkback listens to the input you choose and writes down what is said.</string>
+	<string>LiveCue listens to the input you choose and transcribes spoken comms in real-time.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Talkback turns speech into text on this Mac. Nothing is sent anywhere.</string>
+	<string>LiveCue turns speech into text locally on this Mac. Nothing is sent anywhere.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>LiveCue needs local network access to discover and send MIDI to show control devices.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_apple-midi._udp</string>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>LiveCue Session</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>local.livecue.session</string>
+			</array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>local.livecue.session</string>
+			<key>UTTypeDescription</key>
+			<string>LiveCue Session Document</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.json</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>livecue</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>
