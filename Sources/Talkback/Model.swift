@@ -455,6 +455,10 @@ final class Model {
             midiEngine.sendMSC(deviceID: devID, commandFormat: cmdFormat, command: cmd, cueNumber: cueNum, cueList: cueList)
             actionDesc = "MIDI Show Control (Dev:\(devID) Cue:\(cueNum ?? "-"))"
 
+        case .wingLampFlash:
+            midiEngine.flashWINGLamp()
+            actionDesc = "WING lamp: Ch 6, CC 16, flash 3s then off"
+
         case .flashWindow:
             actionDesc = "Visual Alert"
             triggerFlashAlert()

@@ -28,6 +28,12 @@ struct KeywordRulesView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button("WING FOH PRESET") {
+                    if !model.keywordMatcher.rules.contains(where: { $0.action == .wingLampFlash && $0.keyword.lowercased() == "front of house" }) {
+                        model.keywordMatcher.rules.append(KeywordRule(keyword: "Front of House", action: .wingLampFlash, cooldownSeconds: 3.2))
+                        model.saveConfig()
+                    }
+                }
                 Button {
                     showingAddSheet = true
                 } label: {
@@ -256,6 +262,8 @@ struct KeywordRulesView: View {
             let c = cue ?? "-"
             let l = list.map { "/\($0)" } ?? ""
             return "MSC: Dev \(dev), Fmt \(fmt), Cmd \(cmd), Cue \(c)\(l)"
+        case .wingLampFlash:
+            return "WING Lamp: Ch 6, CC 16, flash 3s then off"
         case .flashWindow:
             return "Visual Alert (Flash Screen)"
         }
@@ -283,6 +291,7 @@ struct RuleEditSheet: View {
         case cc = "MIDI Control Change"
         case programChange = "MIDI Program Change"
         case msc = "MIDI Show Control (MSC)"
+        case wingLamp = "WING Lamp Flash (3 seconds)"
         case flash = "Visual Alert"
 
         var id: String { rawValue }
@@ -403,6 +412,9 @@ struct RuleEditSheet: View {
                         TextField("Cue Number (optional, e.g. '1', '10.5')", text: $mscCueNumber)
                         TextField("Cue List (optional)", text: $mscCueList)
 
+                    case .wingLamp:
+                        Text("Layer 2, encoder 1 must be assigned to Lamp Brightness. Enable Custom Controls USB on WING. Sends channel 6, CC 16: 127/0 every 250 ms for 3 seconds, then off.")
+                            .font(.caption)
                     case .flash:
                         Text("Flashes a high-visibility alert border across the Talkback window.")
                             .font(.caption)
@@ -466,6 +478,8 @@ struct RuleEditSheet: View {
                     mscCommand = Int(cmd)
                     mscCueNumber = cue ?? ""
                     mscCueList = list ?? ""
+                case .wingLampFlash:
+                    selectedActionType = .wingLamp
                 case .flashWindow:
                     selectedActionType = .flash
                 }
@@ -488,6 +502,8 @@ struct RuleEditSheet: View {
             let cue = mscCueNumber.isEmpty ? nil : mscCueNumber
             let list = mscCueList.isEmpty ? nil : mscCueList
             action = .midiMSC(deviceID: UInt8(mscDeviceID), commandFormat: UInt8(mscCommandFormat), command: UInt8(mscCommand), cueNumber: cue, cueList: list)
+        case .wingLamp:
+            action = .wingLampFlash
         case .flash:
             action = .flashWindow
         }

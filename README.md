@@ -165,3 +165,22 @@ swift run LiveCue --file /path/to/multitrack.wav 2
 ## License
 
 Open-source under the MIT License. See [LICENSE](LICENSE) for details.
+
+### WING “Front of House” lamp test
+
+In Keyword Rules, click **WING FOH PRESET**. This adds a case-insensitive
+contains-phrase rule with a 3.2-second cooldown. Its Test button and spoken
+“Front of House” send MIDI channel **6**, CC **16**, alternating **127 / 0**
+every 250 ms for three seconds, ending at **0** (off). Retriggering restarts
+the three-second sequence. The mapping matches Layer 2, encoder 1 assigned
+to OTHER → LAMP BRIGHTNESS in the supplied console photos.
+
+Connect this app's Network MIDI destination to the receiving Mac's enabled
+Network MIDI session. On that Mac, bridge the network session input to the
+WING USB **remote-control** MIDI destination (not its DAW control port).
+Enable **Custom Controls (RX Only) → USB** in WING Setup → MIDI.
+Keep Layer 2 encoder 1 assigned to Lamp Brightness. First use the rule's
+**Test** button, then start transcription and say “Front of House”.
+The app sends through the selected network destinations; select only the
+intended bridge for this test. Physical lamp response needs verification
+on the connected console.

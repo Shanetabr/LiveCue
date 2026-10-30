@@ -215,6 +215,32 @@ public final class MIDIEngine {
         sendUMP(words: [word])
     }
 
+    // A single task owns the lamp so repeated cues cannot interleave on/off messages.
+    private var lampFlashTask: Task<Void, Never>?
+
+    public func flashWINGLamp() {
+        lampFlashTask?.cancel()
+        sendControlChange(channel: 5, controller: 16, value: 127)
+        lampFlashTask = Task { @MainActor [weak self] in
+            let clock = ContinuousClock()
+            let start = clock.now
+            do {
+                // Six half-second flashes; use absolute deadlines to avoid timing drift.
+                for step in 1...11 {
+                    try await clock.sleep(until: start.advanced(by: .milliseconds(step * 250)))
+                    try Task.checkCancellation()
+                    self?.sendControlChange(channel: 5, controller: 16, value: step.isMultiple(of: 2) ? 127 : 0)
+                }
+                try await clock.sleep(until: start.advanced(by: .seconds(3)))
+                try Task.checkCancellation()
+                self?.sendControlChange(channel: 5, controller: 16, value: 0)
+                self?.lampFlashTask = nil
+            } catch {
+                // A replacement flash owns the lamp after cancellation.
+            }
+        }
+    }
+
     // MARK: - Sending MSC
 
     public func sendMSC(deviceID: UInt8, commandFormat: UInt8, command: UInt8, cueNumber: String? = nil, cueList: String? = nil) {
