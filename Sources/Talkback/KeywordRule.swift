@@ -7,6 +7,7 @@ public enum TriggerAction: Codable, Equatable, Sendable {
     case midiCC(channel: UInt8, controller: UInt8, value: UInt8)
     case midiProgramChange(channel: UInt8, program: UInt8)
     case midiMSC(deviceID: UInt8, commandFormat: UInt8, command: UInt8, cueNumber: String?, cueList: String?)
+    case wingLampFlash // Layer 2 encoder 1: channel 6, CC 16, three seconds
     case flashWindow  // visual alert
 }
 
