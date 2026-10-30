@@ -69,7 +69,7 @@ func checkFile(_ path: String, channel: Int) async -> Int32 {
         while file.framePosition < file.length {
             guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 4096) else { break }
             try file.read(into: buffer)
-            if let out = feeder.feed(buffer) { transcriber.send(out) }
+            if let out = feeder.feed(buffer) { try await transcriber.send(out) }
         }
         await transcriber.finish()
         return 0

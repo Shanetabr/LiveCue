@@ -14,9 +14,9 @@ struct ExportSheet: View {
     @State private var selectedFormat: ExportFormat = .txt
     @State private var copiedNotice = false
 
-    var exportedContent: String {
-        model.exportTranscript(format: selectedFormat)
-    }
+    @State private var exportedContent = ""
+    @State private var exportError: String?
+    @State private var exportedLineCount = 0
 
     var body: some View {
         VStack(spacing: 16) {
@@ -36,12 +36,12 @@ struct ExportSheet: View {
             .padding(.horizontal)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("PREVIEW (\(model.lines.count) LINES):")
+                Text("PREVIEW (\(exportedLineCount) LINES):")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color(white: 0.6))
 
                 ScrollView {
-                    Text(exportedContent.isEmpty ? "(Transcript is empty)" : exportedContent)
+                    Text(exportError ?? (exportedContent.isEmpty ? "(Transcript is empty)" : exportedContent))
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Color(white: 0.9))
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -84,7 +84,7 @@ struct ExportSheet: View {
                 .background(abletonCard)
                 .cornerRadius(4)
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(abletonBorder, lineWidth: 1))
-                .disabled(model.lines.isEmpty)
+                .disabled(exportedContent.isEmpty || exportError != nil)
 
                 Button("SAVE FILE…") {
                     saveToFile()
@@ -93,14 +93,29 @@ struct ExportSheet: View {
                 .tint(abletonMint)
                 .foregroundStyle(.black)
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .disabled(model.lines.isEmpty)
+                .disabled(exportedContent.isEmpty || exportError != nil)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
         }
         .padding(16)
         .frame(minWidth: 540, minHeight: 400)
+        .onAppear { refreshExport() }
+        .onChange(of: selectedFormat) { _, _ in
+            refreshExport()
+        }
         .background(abletonBg)
+    }
+
+    private func refreshExport() {
+        do {
+            exportedContent = try model.exportTranscript(format: selectedFormat)
+            exportedLineCount = model.transcriptLineCount
+            exportError = nil
+        } catch {
+            exportedContent = ""
+            exportError = "Could not read transcript: \(error.localizedDescription)"
+        }
     }
 
     private func saveToFile() {

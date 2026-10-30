@@ -4,9 +4,13 @@ import Speech
 /// A thread-safe audio sink for delivering PCM buffers into the transcriber pipeline.
 public struct AudioSink: Sendable {
     let feed: AsyncStream<AnalyzerInput>.Continuation
+    let onOverflow: @Sendable () -> Void
 
     public func send(_ buffer: AVAudioPCMBuffer) {
-        feed.yield(AnalyzerInput(buffer: buffer))
+        if case .dropped = feed.yield(AnalyzerInput(buffer: buffer)) {
+            feed.finish()
+            onOverflow()
+        }
     }
 }
 
@@ -26,10 +30,15 @@ final class Transcriber {
     private let input: AsyncStream<AnalyzerInput>
     private let feed: AsyncStream<AnalyzerInput>.Continuation
     private var reading: Task<Void, Never>?
+    private var reportError: (@MainActor (Error) -> Void)?
 
     /// A thread-safe sink to feed audio into this transcriber from background taps.
     var audioSink: AudioSink {
-        AudioSink(feed: feed)
+        AudioSink(feed: feed, onOverflow: { [weak self] in
+            Task { @MainActor in
+                self?.reportError?(Failure(errorDescription: "Speech processing fell behind the bounded audio queue. Reduce enabled channels and restart."))
+            }
+        })
     }
 
     /// Gets the speech model if this Mac does not have it yet (needs internet once),
@@ -64,14 +73,16 @@ final class Transcriber {
         self.module = module
         self.format = format
         self.analyzer = SpeechAnalyzer(modules: [module])
-        (input, feed) = AsyncStream<AnalyzerInput>.makeStream()
+        (input, feed) = AsyncStream<AnalyzerInput>.makeStream(bufferingPolicy: .bufferingOldest(32))
     }
 
     func start(
         onResult: @escaping @MainActor (_ text: String, _ final: Bool) -> Void,
         onError: @escaping @MainActor (Error) -> Void
     ) async throws {
+        reportError = onError
         let module = self.module
+        let feed = self.feed
         reading = Task { @MainActor in
             do {
                 for try await result in module.results {
@@ -79,6 +90,7 @@ final class Transcriber {
                     onResult(String(result.text.characters), result.isFinal)
                 }
             } catch {
+                feed.finish()
                 if !Task.isCancelled {
                     onError(error)
                 }
@@ -87,13 +99,22 @@ final class Transcriber {
         try await analyzer.start(inputSequence: input)
     }
 
-    /// Safe to call from the audio thread.
-    nonisolated func send(_ buffer: AVAudioPCMBuffer) {
-        feed.yield(AnalyzerInput(buffer: buffer))
+    // Offline files can wait for capacity without dropping samples or blocking an audio thread.
+    nonisolated func send(_ buffer: AVAudioPCMBuffer) async throws {
+        while true {
+            try Task.checkCancellation()
+            switch feed.yield(AnalyzerInput(buffer: buffer)) {
+            case .enqueued: return
+            case .terminated: throw Failure(errorDescription: "Audio input is closed.")
+            case .dropped: try await Task.sleep(for: .milliseconds(5))
+            @unknown default: return
+            }
+        }
     }
 
     /// Lets the engine settle what it has heard, then ends cleanly without hanging.
     func finish() async {
+        reportError = nil
         feed.finish()
         reading?.cancel()
         _ = await reading?.result

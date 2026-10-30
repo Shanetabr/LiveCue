@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import Accelerate
 import AudioToolbox
 import CoreAudio
 import Foundation
@@ -10,6 +11,7 @@ final class ChannelFeeder: @unchecked Sendable {
     private let target: AVAudioFormat
     private var mono: AVAudioFormat?
     private var converter: AVAudioConverter?
+    private var monoBuffer: AVAudioPCMBuffer?
 
     private var _peak: Float = 0
     private var lock = os_unfair_lock()
@@ -43,19 +45,24 @@ final class ChannelFeeder: @unchecked Sendable {
                                  channels: 1, interleaved: false)
             converter = mono.flatMap { AVAudioConverter(from: $0, to: target) }
             converter?.primeMethod = .none
+            monoBuffer = nil
         }
-        guard let mono, let converter,
-              let one = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: buffer.frameLength) else { return nil }
+        guard let mono, let converter else { return nil }
+        if monoBuffer == nil || monoBuffer!.frameCapacity < buffer.frameLength {
+            monoBuffer = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: buffer.frameLength)
+        }
+        guard let one = monoBuffer else { return nil }
 
         let stride = buffer.format.isInterleaved ? Int(buffer.format.channelCount) : 1
         let source = buffer.format.isInterleaved ? data[0] + ch : data[ch]
         let dest = one.floatChannelData![0]
         var top: Float = 0
-        for i in 0..<frames {
-            let v = source[i * stride]
-            dest[i] = v
-            top = max(top, abs(v))
+        if stride == 1 {
+            dest.update(from: source, count: frames)
+        } else {
+            for i in 0..<frames { dest[i] = source[i * stride] }
         }
+        vDSP_maxmgv(source, vDSP_Stride(stride), &top, vDSP_Length(frames))
         one.frameLength = buffer.frameLength
         setPeak(top)
 
@@ -180,9 +187,9 @@ public final class AudioCapture: @unchecked Sendable {
                 var rawPeak: Float = 0
                 for c in 0..<chCount {
                     let ptr = data[c]
-                    for i in 0..<frames {
-                        rawPeak = max(rawPeak, abs(ptr[i]))
-                    }
+                    var channelPeak: Float = 0
+                    vDSP_maxmgv(ptr, 1, &channelPeak, vDSP_Length(frames))
+                    rawPeak = max(rawPeak, channelPeak)
                 }
                 os_unfair_lock_lock(&self.lock)
                 self.hardwarePeak = rawPeak
@@ -222,11 +229,9 @@ public final class AudioCapture: @unchecked Sendable {
     /// Reads the overall peak volume across all active channels.
     public func overallPeak() -> Float {
         os_unfair_lock_lock(&lock)
-        let hw = hardwarePeak
-        let feeders = Array(feederMap.values)
+        let peak = hardwarePeak
         os_unfair_lock_unlock(&lock)
-        let feederPeak = feeders.reduce(Float(0)) { max($0, $1.peak) }
-        return max(hw, feederPeak)
+        return peak
     }
 
     /// Attempts to restart the engine with the current device and targets (e.g. after sample rate change)
@@ -241,10 +246,13 @@ public final class AudioCapture: @unchecked Sendable {
             NotificationCenter.default.removeObserver(observer)
             configObserver = nil
         }
-        guard let engine else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        self.engine = nil
+        if let engine {
+            engine.inputNode.removeTap(onBus: 0)
+            engine.stop()
+            self.engine = nil
+        }
+        currentTargets = []
+        currentDevice = nil
 
         os_unfair_lock_lock(&lock)
         self.feederMap.removeAll()

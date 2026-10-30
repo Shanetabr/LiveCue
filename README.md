@@ -184,3 +184,30 @@ Keep Layer 2 encoder 1 assigned to Lamp Brightness. First use the rule's
 The app sends through the selected network destinations; select only the
 intended bridge for this test. Physical lamp response needs verification
 on the connected console.
+
+### Memory and long sessions
+
+Live audio input is bounded to 32 queued buffers per channel. If recognition
+cannot keep up, capture stops with a visible error; lower the enabled channel
+count before restarting. File transcription waits for queue capacity instead
+of dropping audio. Mono conversion scratch buffers are reused, while buffers
+queued for recognition remain independently owned. Peak metering uses Accelerate.
+
+The live transcript keeps 500–600 recent lines. Older lines are archived in
+atomic batches in the system temporary directory and included in session saves
+and exports. Clear/New Session removes that session's temporary history. If an
+archive write fails, lines stay in memory and a status message reports the error.
+Save sessions normally to keep them permanently. Opening, saving, and exporting
+large sessions still temporarily materializes the full transcript in memory.
+Export previews are snapshots and are generated once per selected format.
+
+Regression checks (no microphone or speech model download required):
+
+```sh
+sh scripts/test-memory.sh
+```
+
+These check a 20,000-line transcript round trip, archive write failure,
+bounded audio overload behavior, and queued audio ownership during buffer reuse.
+They do not measure Apple's speech-engine RAM consumption; live multi-channel
+memory and latency still depend on hardware, audio format, and enabled channels.
