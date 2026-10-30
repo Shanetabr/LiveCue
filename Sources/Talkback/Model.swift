@@ -16,7 +16,30 @@ final class Model {
     var busy = false         // starting or stopping
     var status = "Stopped"
     var level: Float = 0
-    var lines: [Line] = []
+    var lines: [Line] = [] // recent transcript window
+    var archivedLineCount = 0
+    var transcriptLineCount: Int { archivedLineCount + lines.count }
+    @ObservationIgnored private var transcriptArchive = TranscriptArchive()
+
+    private func archiveOlderLines() {
+        guard lines.count > 600 else { return }
+        do {
+            try transcriptArchive.compact(&lines)
+            archivedLineCount = transcriptArchive.count
+        } catch {
+            status = "Transcript archive failed; keeping history in memory: \(error.localizedDescription)"
+        }
+    }
+
+    private func fullTranscript() throws -> [Line] {
+        try transcriptArchive.readAll() + lines
+    }
+
+    private func resetTranscript() {
+        lines = []
+        transcriptArchive = TranscriptArchive()
+        archivedLineCount = 0
+    }
 
     // Multi-channel runtime state (enforced max 6 channels)
     var channels: [ChannelConfig] = []
@@ -269,7 +292,7 @@ final class Model {
     }
 
     func clear() {
-        lines.removeAll()
+        resetTranscript()
         for i in 0..<channelStates.count {
             channelStates[i].partial = ""
         }
@@ -310,24 +333,29 @@ final class Model {
             targetConfigs = [fallback]
         }
 
+        // Release previous engines before reconnecting or replacing a stopped capture.
+        for transcriber in activeTranscribers.values { await transcriber.finish() }
+        activeTranscribers.removeAll()
         do {
             var targets: [ChannelTarget] = []
-            var transcribers: [UUID: Transcriber] = [:]
 
             for config in targetConfigs {
                 let transcriber = try await Transcriber.make { [weak self] text in
                     self?.status = "[\(config.name)]: \(text)"
                 }
 
+                activeTranscribers[config.id] = transcriber
                 try await transcriber.start(
                     onResult: { [weak self] text, final in
                         self?.channelHeard(config: config, text: text, final: final)
                     },
                     onError: { [weak self] error in
-                        self?.status = "\(config.name) error: \(error.localizedDescription)"
+                        guard let self else { return }
+                        Task { @MainActor in
+                            await self.stop()
+                            self.status = "\(config.name) stopped: \(error.localizedDescription)"
+                        }
                     })
-
-                transcribers[config.id] = transcriber
 
                 let target = ChannelTarget(
                     id: config.id,
@@ -338,7 +366,6 @@ final class Model {
                 targets.append(target)
             }
 
-            self.activeTranscribers = transcribers
             try capture.startMulti(device: device.id, targets: targets)
             running = true
             status = "Listening to \(targetConfigs.count) channel(s) on \(device.name)"
@@ -396,6 +423,7 @@ final class Model {
                     channelName: config.name,
                     channelColorHex: config.colorHex
                 ))
+                archiveOlderLines()
                 hasUnsavedChanges = true
 
                 // Check keyword rules against this channel's recognized text
@@ -519,7 +547,7 @@ final class Model {
     }
 
     public func newSession() {
-        lines.removeAll()
+        resetTranscript()
         for i in 0..<channelStates.count {
             channelStates[i].partial = ""
         }
@@ -557,23 +585,23 @@ final class Model {
     }
 
     private func saveToURL(_ url: URL) {
-        let session = LiveCueSession(
-            version: "1.0",
-            title: url.deletingPathExtension().lastPathComponent,
-            createdAt: sessionCreatedAt,
-            modifiedAt: Date(),
-            lines: lines,
-            channels: channels,
-            rules: keywordMatcher.rules,
-            triggerLogs: triggerLogs,
-            deviceName: device?.name
-        )
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-
         do {
+            let session = LiveCueSession(
+                version: "1.0",
+                title: url.deletingPathExtension().lastPathComponent,
+                createdAt: sessionCreatedAt,
+                modifiedAt: Date(),
+                lines: try fullTranscript(),
+                channels: channels,
+                rules: keywordMatcher.rules,
+                triggerLogs: triggerLogs,
+                deviceName: device?.name
+            )
+
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+
             let data = try encoder.encode(session)
             try data.write(to: url, options: .atomic)
             currentDocumentURL = url
@@ -605,7 +633,9 @@ final class Model {
             decoder.dateDecodingStrategy = .iso8601
             let session = try decoder.decode(LiveCueSession.self, from: data)
 
+            resetTranscript()
             lines = session.lines
+            archiveOlderLines()
             if !session.channels.isEmpty {
                 channels = Array(session.channels.prefix(AppConfig.maxChannelsLimit))
                 syncChannelStates()
@@ -613,7 +643,7 @@ final class Model {
             if !session.rules.isEmpty {
                 keywordMatcher.rules = session.rules
             }
-            triggerLogs = session.triggerLogs
+            triggerLogs = Array(session.triggerLogs.prefix(100))
             sessionCreatedAt = session.createdAt
             currentDocumentURL = url
             addRecentDocument(url)
@@ -626,7 +656,7 @@ final class Model {
 
     // MARK: - Export
 
-    public func exportTranscript(format: ExportFormat) -> String {
-        return TranscriptExporter.export(lines: lines, format: format, defaultChannel: "Comms")
+    public func exportTranscript(format: ExportFormat) throws -> String {
+        TranscriptExporter.export(lines: try fullTranscript(), format: format, defaultChannel: "Comms")
     }
 }

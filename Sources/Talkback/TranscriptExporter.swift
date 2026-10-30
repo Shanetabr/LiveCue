@@ -52,9 +52,10 @@ public struct TranscriptExporter {
 
     private static func exportCSV(lines: [Line], defaultChannel: String?) -> String {
         var output = "Timestamp,Channel,Text\n"
+        let formatter = ISO8601DateFormatter()
         for line in lines {
             let ch = line.channelName ?? defaultChannel ?? "Default"
-            let timeStr = ISO8601DateFormatter().string(from: line.time)
+            let timeStr = formatter.string(from: line.time)
             let escapedText = "\"" + line.text.replacingOccurrences(of: "\"", with: "\"\"") + "\""
             let escapedCh = "\"" + ch.replacingOccurrences(of: "\"", with: "\"\"") + "\""
             output += "\(timeStr),\(escapedCh),\(escapedText)\n"

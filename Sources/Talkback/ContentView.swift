@@ -478,6 +478,11 @@ struct ContentView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
+                        if model.archivedLineCount > 0 {
+                            Text("Showing recent lines. All \(model.transcriptLineCount) lines are included when saving or exporting.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                         ForEach(model.lines) { line in
                             transcriptLineRow(line: line)
                         }
@@ -496,7 +501,7 @@ struct ContentView: View {
                 } action: { _, near in
                     atLive = near
                 }
-                .onChange(of: model.lines.count) { _, _ in if atLive { proxy.scrollTo("live", anchor: .bottom) } }
+                .onChange(of: model.lines.last?.id) { _, _ in if atLive { proxy.scrollTo("live", anchor: .bottom) } }
                 .overlay(alignment: .bottom) {
                     if !atLive {
                         Button {
