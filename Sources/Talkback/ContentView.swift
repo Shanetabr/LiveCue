@@ -361,7 +361,7 @@ struct ContentView: View {
                 Text("RULES (\(model.keywordMatcher.rules.count))").tag(ViewTab.rules)
                 HStack(spacing: 4) {
                     Circle()
-                        .fill(model.midiEngine.isConnected ? abletonMint : Color.gray)
+                        .fill(model.midiEngine.networkPortAvailable ? abletonMint : Color.gray)
                         .frame(width: 6, height: 6)
                     Text("NETWORK MIDI")
                 }.tag(ViewTab.midi)
@@ -633,17 +633,17 @@ struct ContentView: View {
                     .foregroundStyle(Color(white: 0.5))
             }
 
-            if model.midiEngine.isConnected {
+            if model.midiEngine.selectedUSBOutput == 0 ? model.midiEngine.networkPortAvailable : model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }) {
                 HStack(spacing: 5) {
                     Circle().fill(abletonMint).frame(width: 6, height: 6)
-                    Text("MIDI ONLINE")
+                    Text("MIDI PORT AVAILABLE")
                         .font(.system(size: 10, weight: .heavy, design: .monospaced))
                         .foregroundStyle(abletonMint)
                 }
             } else {
                 HStack(spacing: 5) {
                     Circle().fill(Color(white: 0.3)).frame(width: 6, height: 6)
-                    Text("MIDI OFFLINE")
+                    Text("MIDI PORT UNAVAILABLE")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                         .foregroundStyle(Color(white: 0.4))
                 }

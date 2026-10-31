@@ -1,5 +1,7 @@
 # LiveCue Talkback
 
+Current development status and next hardware checks: [Claude Opus handoff](CLAUDE_OPUS_HANDOFF.md).
+
 **An open-source ProdCom alternative for macOS.**
 
 LiveQ is a real-time speech-to-text transcription and show-control automation application designed for live entertainment production, broadcast, theater, and corporate events. It listens to multi-channel audio feeds (from USB/Thunderbolt interfaces or **Dante Virtual Soundcard**) and triggers network MIDI cues (to QLab, ETC Eos, grandMA, etc.) based on spoken keywords and phrases.
@@ -25,10 +27,10 @@ LiveQ is a real-time speech-to-text transcription and show-control automation ap
   - Real-time dB peak level meters per channel.
 
 - 🌐 **Network MIDI (Apple-MIDI / RTP-MIDI)**
-  - Native CoreMIDI `MIDINetworkSession` support transmitting over standard UDP port `5004`.
+  - Select actual CoreMIDI network inputs and outputs; manage RTP-MIDI participants in Audio MIDI Setup.
   - Automatic **Bonjour discovery** (`_apple-midi._udp`) of show control machines on the local network.
-  - Manual IP/host destination entry for fixed infrastructure (e.g., `192.168.1.50:5004`).
-  - Sends Universal MIDI Packet (UMP) format over `MIDISendEventList` and native SysEx.
+  - Add fixed IP/host participants in Audio MIDI Setup; discovered hosts in LiveCue are informational.
+  - Sends MIDI 1.0 bytes and bounded SysEx through CoreMIDI, with WING USB selection and an optional receive bridge.
 
 - ⚡️ **Keyword → Show Control Trigger Engine**
   - **Match Modes:** Contains phrase, Exact line match, or Prefix matching.

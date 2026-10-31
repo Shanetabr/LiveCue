@@ -12,17 +12,51 @@ public struct MIDIDestination: Identifiable, Equatable, Hashable, Sendable {
     public let isManual: Bool
 }
 
+public struct MIDIUSBOutput: Identifiable, Equatable, Sendable {
+    public let id: MIDIEndpointRef
+    public let name: String
+}
+
+public struct MIDINetworkEndpoint: Identifiable, Equatable, Sendable {
+    /// CoreMIDI unique IDs survive endpoint-reference changes and session renaming.
+    public let id: MIDIUniqueID
+    public let endpoint: MIDIEndpointRef
+    public let name: String
+
+    static func selectedID(current: MIDIUniqueID?, available: [MIDINetworkEndpoint]) -> MIDIUniqueID? {
+        // Retain an unavailable selection: never silently send to another session.
+        current ?? (available.count == 1 ? available[0].id : nil)
+    }
+}
+
 @Observable
 @MainActor
 public final class MIDIEngine {
     public var destinations: [MIDIDestination] = []
-    public var selectedDestinationIDs: Set<String> = [] {
-        didSet {
-            if !synchronizingSession { updateConnections(previous: oldValue) }
-        }
+    // Retained for saved configuration compatibility. Participants are managed in
+    // Audio MIDI Setup; MIDINetworkSession's management API is not functional on macOS.
+    public var selectedDestinationIDs: Set<String> = []
+    public private(set) var isConnected = false // Remote participant state is unknown.
+    public private(set) var networkOutputs: [MIDINetworkEndpoint] = []
+    public private(set) var networkInputs: [MIDINetworkEndpoint] = []
+    public var selectedNetworkOutputID: MIDIUniqueID?
+    public var selectedNetworkInputID: MIDIUniqueID? {
+        didSet { if oldValue != selectedNetworkInputID { connectNetworkInput() } }
     }
-    public var isConnected: Bool = false
+    public var networkPortAvailable: Bool {
+        networkOutputs.contains { $0.id == selectedNetworkOutputID }
+    }
     public var lastError: String?
+    public var usbOutputs: [MIDIUSBOutput] = []
+    public var selectedUSBOutput: MIDIEndpointRef = 0
+    public var bridgeNetworkToUSB = false
+    public private(set) var receivedNetworkMessages = 0
+    public private(set) var forwardedMessages = 0
+    public private(set) var lastReceivedMIDI = "No network MIDI received"
+    public private(set) var lastSentMIDI = "No MIDI sent"
+    private var inputPort: MIDIPortRef = 0
+    private var connectedNetworkSource: MIDIEndpointRef = 0
+    private var networkInputGeneration: UInt = 0
 
     private var midiClient: MIDIClientRef = 0
     private var outputPort: MIDIPortRef = 0
@@ -30,28 +64,18 @@ public final class MIDIEngine {
     private let browserQueue = DispatchQueue(label: "local.livecue.app.MIDIBrowser")
     private var browser: NWBrowser?
     private var resolving: [String: NWConnection] = [:]
-    private var sessionObserver: NSObjectProtocol?
-    private var synchronizingSession = false
     public private(set) var sentMessageCount = 0
-
-    private let session = MIDINetworkSession.default()
-
-    // Store hosts by ID for connection management
-    private var hosts: [String: MIDINetworkHost] = [:]
 
     public init() {
         setupCoreMIDI()
-        setupNetworkSession()
-        refreshConnectionState()
-        sessionObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name(MIDINetworkNotificationSessionDidChange), object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.refreshConnectionState() }
-        }
+        setupNetworkReceiver()
+        refreshMIDIPorts()
         startBonjourDiscovery()
     }
 
     private func setupCoreMIDI() {
-        var status = MIDIClientCreateWithBlock("LiveCue MIDI Client" as CFString, &midiClient) { _ in
-            // Handle MIDI setup changes if needed
+        var status = MIDIClientCreateWithBlock("LiveCue MIDI Client" as CFString, &midiClient) { @Sendable [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshMIDIPorts() }
         }
 
         if status != noErr {
@@ -63,11 +87,6 @@ public final class MIDIEngine {
         if status != noErr {
             lastError = "Failed to create MIDI output port: \(status)"
         }
-    }
-
-    private func setupNetworkSession() {
-        session.isEnabled = true
-        session.connectionPolicy = .anyone
     }
 
     private func startBonjourDiscovery() {
@@ -121,127 +140,164 @@ public final class MIDIEngine {
     private func addDiscoveredDestination(_ dest: MIDIDestination) {
         if !destinations.contains(where: { $0.id == dest.id }) {
             destinations.append(dest)
-
-            let host = MIDINetworkHost(name: dest.name, address: dest.address, port: Int(dest.port))
-            hosts[dest.id] = host
-            session.addContact(host)
-
-            updateConnections()
         }
     }
 
     public func addManualDestination(name: String, address: String, port: UInt16) {
         let id = "\(address):\(port)"
         if !destinations.contains(where: { $0.id == id }) {
-            let dest = MIDIDestination(id: id, name: name, address: address, port: port, isConnected: false, isManual: true)
-            destinations.append(dest)
-
-            let host = MIDINetworkHost(name: dest.name, address: dest.address, port: Int(dest.port))
-            hosts[id] = host
-            session.addContact(host)
-
-            updateConnections()
+            destinations.append(MIDIDestination(id: id, name: name, address: address,
+                                               port: port, isConnected: false, isManual: true))
         }
     }
 
-    private func updateConnections(previous: Set<String> = []) {
-        // Only an explicit deselection may remove a connection. Discovery must never
-        // tear down participants connected through Audio MIDI Setup.
-        for connection in session.connections() {
-            let id = "\(connection.host.address):\(connection.host.port)"
-            if previous.subtracting(selectedDestinationIDs).contains(id) {
-                session.removeConnection(connection)
-            }
+    /// Refresh real driver endpoints; Audio MIDI Setup owns their peer connections.
+    public func refreshMIDIPorts() {
+        refreshUSBOutputs()
+        networkOutputs = (0..<MIDIGetNumberOfDestinations()).compactMap {
+            Self.networkEndpoint(MIDIGetDestination($0))
         }
-        for id in selectedDestinationIDs {
-            if let host = hosts[id], !session.connections().contains(where: { $0.host.hasSameAddress(as: host) }) {
-                if !session.addConnection(MIDINetworkConnection(host: host)) {
-                    lastError = "Could not add MIDI connection to \(host.name)"
-                }
-            }
+        networkInputs = (0..<MIDIGetNumberOfSources()).compactMap {
+            Self.networkEndpoint(MIDIGetSource($0))
         }
-        refreshConnectionState()
+        selectedNetworkOutputID = MIDINetworkEndpoint.selectedID(current: selectedNetworkOutputID, available: networkOutputs)
+        selectedNetworkInputID = MIDINetworkEndpoint.selectedID(current: selectedNetworkInputID, available: networkInputs)
+        connectNetworkInput()
     }
 
-    private func refreshConnectionState() {
-        let connections = session.connections()
-        synchronizingSession = true
-        defer { synchronizingSession = false }
-        for connection in connections {
-            let host = connection.host
-            let id = "\(host.address):\(host.port)"
-            hosts[id] = host
-            if !destinations.contains(where: { $0.id == id }) {
-                destinations.append(MIDIDestination(id: id, name: host.name, address: host.address, port: UInt16(clamping: host.port), isConnected: true, isManual: false))
-            }
-            selectedDestinationIDs.insert(id)
+    private static func stringProperty(_ object: MIDIObjectRef, _ property: CFString) -> String? {
+        var value: Unmanaged<CFString>?
+        guard MIDIObjectGetStringProperty(object, property, &value) == noErr, let value else { return nil }
+        return value.takeRetainedValue() as String
+    }
+
+    private static func networkEndpoint(_ endpoint: MIDIEndpointRef) -> MIDINetworkEndpoint? {
+        var offline: Int32 = 0
+        MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyOffline, &offline)
+        guard offline == 0, let name = stringProperty(endpoint, kMIDIPropertyDisplayName) else { return nil }
+        let owner = stringProperty(endpoint, kMIDIPropertyDriverOwner)?.lowercased() ?? ""
+        // Driver ownership survives user-renamed sessions. Older drivers may only
+        // expose the standard Network display-name prefix.
+        guard owner.contains("midirtp") || owner.contains("networkmidi") ||
+                name.hasPrefix("Network ") else { return nil }
+        var uniqueID: MIDIUniqueID = 0
+        guard MIDIObjectGetIntegerProperty(endpoint, kMIDIPropertyUniqueID, &uniqueID) == noErr,
+              uniqueID != 0 else { return nil }
+        return MIDINetworkEndpoint(id: uniqueID, endpoint: endpoint, name: name)
+    }
+
+    private func connectNetworkInput() {
+        guard inputPort != 0 else { return }
+        let source = networkInputs.first { $0.id == selectedNetworkInputID }?.endpoint ?? 0
+        guard source != connectedNetworkSource else { return }
+        networkInputGeneration &+= 1
+        if connectedNetworkSource != 0 {
+            MIDIPortDisconnectSource(inputPort, connectedNetworkSource)
+            connectedNetworkSource = 0
         }
-        for i in destinations.indices {
-            destinations[i].isConnected = connections.contains { connection in
-                guard let host = hosts[destinations[i].id] else { return false }
-                return connection.host.hasSameAddress(as: host)
+        guard source != 0 else {
+            if selectedNetworkInputID != nil {
+                lastError = "Selected network MIDI input is unavailable. Enable its session in Audio MIDI Setup or select another input."
             }
+            return
         }
-        isConnected = !connections.isEmpty
+        let status = MIDIPortConnectSource(inputPort, source, UnsafeMutableRawPointer(bitPattern: networkInputGeneration))
+        if status == noErr {
+            connectedNetworkSource = source
+        } else {
+            lastError = "Cannot monitor selected network MIDI input: \(status)"
+        }
     }
 
     // MARK: - Sending MIDI
 
-    private func sendUMP(words: [UInt32]) {
-        refreshConnectionState()
-        guard !session.connections().isEmpty else {
-            lastError = "No network MIDI participants. Connect the WING bridge Mac in Audio MIDI Setup or select it here."
-            return
+    public func refreshUSBOutputs() {
+        usbOutputs = (0..<MIDIGetNumberOfDestinations()).compactMap { index in
+            let endpoint = MIDIGetDestination(index)
+            var name: Unmanaged<CFString>?
+            guard MIDIObjectGetStringProperty(endpoint, kMIDIPropertyDisplayName, &name) == noErr, let name else { return nil }
+            let label = name.takeRetainedValue() as String
+            guard label.localizedCaseInsensitiveContains("WING") else { return nil }
+            return MIDIUSBOutput(id: endpoint, name: label)
         }
-        let destination = session.destinationEndpoint()
-        if destination == 0 {
-            lastError = "Network session destination endpoint not available"
-            return
+        if selectedUSBOutput != 0 && !usbOutputs.contains(where: { $0.id == selectedUSBOutput }) {
+            // Keep the missing USB selection so a later cue cannot unexpectedly
+            // fall back to a network destination.
+            bridgeNetworkToUSB = false
+            lastError = "Selected WING USB output disconnected. Select it again."
         }
+    }
 
-        var eventList = MIDIEventList()
-        let packet = MIDIEventListInit(&eventList, ._1_0)
+    private func setupNetworkReceiver() {
+        let status = MIDIInputPortCreateWithBlock(midiClient, "LiveCue Network Monitor" as CFString, &inputPort) { @Sendable [weak self] list, context in
+            let packets = MIDIWire.packets(list)
+            let generation = UInt(bitPattern: context)
+            Task { @MainActor [weak self] in
+                guard let self, self.networkInputGeneration == generation else { return }
+                for bytes in packets {
+                    self.receivedNetworkMessages += 1
+                    self.lastReceivedMIDI = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
+                    if self.bridgeNetworkToUSB && self.selectedUSBOutput != 0 {
+                        if self.sendBytes(bytes, destination: self.selectedUSBOutput) { self.forwardedMessages += 1 }
+                    }
+                }
+            }
+        }
+        guard status == noErr else { lastError = "Cannot create MIDI receiver: \(status)"; return }
+    }
 
-        MIDIEventListAdd(&eventList, MemoryLayout<MIDIEventList>.size, packet, 0, words.count, words)
+    @discardableResult
+    private func sendBytes(_ bytes: [UInt8], destination: MIDIEndpointRef) -> Bool {
+        let status = MIDIWire.send(bytes, port: outputPort, destination: destination)
+        guard status == noErr else { lastError = "MIDI send failed: \(status)"; return false }
+        sentMessageCount += 1
+        lastSentMIDI = bytes.map { String(format: "%02X", $0) }.joined(separator: " ")
+        lastError = nil
+        return true
+    }
 
-        let status = MIDISendEventList(outputPort, destination, &eventList)
-        if status != noErr {
-            self.lastError = "Failed to send MIDI: \(status)"
+    private func sendMessage(_ bytes: [UInt8]) {
+        if selectedUSBOutput != 0 {
+            guard usbOutputs.contains(where: { $0.id == selectedUSBOutput }) else {
+                lastError = "Selected WING USB output is unavailable"; return
+            }
+            sendBytes(bytes, destination: selectedUSBOutput)
         } else {
-            lastError = nil
-            sentMessageCount += 1
+            // The network driver exposes normal CoreMIDI destinations on macOS.
+            // A destination can exist before peers connect, so send acceptance is
+            // deliberately not presented as proof that the receiving Mac got it.
+            refreshMIDIPorts()
+            guard let id = selectedNetworkOutputID else {
+                lastError = networkOutputs.isEmpty
+                    ? "No network MIDI output. Enable a session in Audio MIDI Setup and connect the audio Mac."
+                    : "Choose a network MIDI output before sending."
+                return
+            }
+            guard let output = networkOutputs.first(where: { $0.id == id }) else {
+                lastError = "Selected network MIDI output is unavailable. Enable its session in Audio MIDI Setup or select another output."
+                return
+            }
+            sendBytes(bytes, destination: output.endpoint)
         }
     }
 
     public func sendNoteOn(channel: UInt8, note: UInt8, velocity: UInt8) {
-        let ch = channel & 0x0F
-        let n = note & 0x7F
-        let v = velocity & 0x7F
-        let word = UInt32(0x20900000) | (UInt32(ch) << 16) | (UInt32(n) << 8) | UInt32(v)
-        sendUMP(words: [word])
+        sendMessage([0x90 | (channel & 0x0F), note & 0x7F, velocity & 0x7F])
     }
-
     public func sendNoteOff(channel: UInt8, note: UInt8, velocity: UInt8) {
-        let ch = channel & 0x0F
-        let n = note & 0x7F
-        let v = velocity & 0x7F
-        let word = UInt32(0x20800000) | (UInt32(ch) << 16) | (UInt32(n) << 8) | UInt32(v)
-        sendUMP(words: [word])
+        sendMessage([0x80 | (channel & 0x0F), note & 0x7F, velocity & 0x7F])
     }
-
     public func sendControlChange(channel: UInt8, controller: UInt8, value: UInt8) {
-        let ch = channel & 0x0F
-        let c = controller & 0x7F
-        let v = value & 0x7F
-        let word = UInt32(0x20B00000) | (UInt32(ch) << 16) | (UInt32(c) << 8) | UInt32(v)
-        sendUMP(words: [word])
+        sendMessage([0xB0 | (channel & 0x0F), controller & 0x7F, value & 0x7F])
+    }
+    public func sendProgramChange(channel: UInt8, program: UInt8) {
+        sendMessage([0xC0 | (channel & 0x0F), program & 0x7F])
     }
 
-    public func sendProgramChange(channel: UInt8, program: UInt8) {
-        let ch = channel & 0x0F
-        let p = program & 0x7F
-        let word = UInt32(0x20C00000) | (UInt32(ch) << 16) | (UInt32(p) << 8)
-        sendUMP(words: [word])
+    public func setWINGLamp(on: Bool) {
+        lampFlashTask?.cancel()
+        lampFlashTask = nil
+        sendControlChange(channel: 5, controller: 16, value: on ? 127 : 0)
     }
 
     // A single task owns the lamp so repeated cues cannot interleave on/off messages.
@@ -295,28 +351,6 @@ public final class MIDIEngine {
     }
 
     private func sendSysEx(bytes: [UInt8]) {
-        refreshConnectionState()
-        guard !session.connections().isEmpty else {
-            lastError = "No network MIDI participants. Connect the WING bridge Mac in Audio MIDI Setup or select it here."
-            return
-        }
-        let destination = session.destinationEndpoint()
-        if destination == 0 {
-            lastError = "Network session destination endpoint not available"
-            return
-        }
-
-        var packetList = MIDIPacketList()
-        var packet = MIDIPacketListInit(&packetList)
-        guard bytes.count <= 256 else {
-            lastError = "SysEx exceeds MIDI packet capacity"
-            return
-        }
-        packet = MIDIPacketListAdd(&packetList, MemoryLayout<MIDIPacketList>.size, packet, 0, bytes.count, bytes)
-
-        let status = MIDISend(outputPort, destination, &packetList)
-        if status != noErr {
-            self.lastError = "Failed to send SysEx: \(status)"
-        }
+        sendMessage(bytes)
     }
 }

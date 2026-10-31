@@ -1,5 +1,7 @@
 # Talkback — Agent Handoff Document (Cycle 2)
 
+> Historical handoff. Current status: [Claude Opus handoff](../CLAUDE_OPUS_HANDOFF.md).
+
 **Date:** 2026-10-07  
 **Status:** Build passing (`swift build` ✅, `./build.sh` dist app bundle ✅)  
 **Version:** v0.2.0 (Network MIDI, Keyword Trigger Engine, Configuration Persistence, Export & Full UI)
