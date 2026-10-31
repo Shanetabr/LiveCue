@@ -16,6 +16,7 @@ final class Model {
     var busy = false         // starting or stopping
     var status = "Stopped"
     var level: Float = 0
+    var audioInputStatus = "Audio input stopped"
     var lines: [Line] = [] // recent transcript window
     var archivedLineCount = 0
     var transcriptLineCount: Int { archivedLineCount + lines.count }
@@ -182,7 +183,7 @@ final class Model {
             midiEngine.addManualDestination(name: dest.name, address: dest.address, port: dest.port)
         }
         if !config.selectedMIDIDestinationIDs.isEmpty {
-            midiEngine.selectedDestinationIDs = Set(config.selectedMIDIDestinationIDs)
+            midiEngine.selectedDestinationIDs.formUnion(config.selectedMIDIDestinationIDs)
         }
         validateChannelsForCurrentDevice()
     }
@@ -262,6 +263,7 @@ final class Model {
     private func stopMeterTimer() {
         meterTimer?.invalidate()
         meterTimer = nil
+        audioInputStatus = "Audio input stopped"
         level = 0
         for i in 0..<channelStates.count {
             channelStates[i].level = 0
@@ -270,7 +272,15 @@ final class Model {
 
     private func pollLevels() {
         guard running else { return }
-        let overall = capture.overallPeak()
+        let input = capture.inputDiagnostics()
+        if input.buffers == 0 {
+            audioInputStatus = "\(capture.openedFormat): waiting for audio callbacks from selected device"
+        } else if input.peak < 0.0001 {
+            audioInputStatus = "\(capture.openedFormat): receiving audio buffers, signal below −80 dBFS"
+        } else {
+            audioInputStatus = "\(capture.openedFormat): signal on input \(input.strongestInput + 1)"
+        }
+        let overall = input.peak
         level = max(overall, level * 0.82)
 
         for i in 0..<channelStates.count {
@@ -384,11 +394,13 @@ final class Model {
     }
 
     func selectDevice(_ id: AudioDeviceID) {
-        guard deviceID != id else { return }
+        guard !busy, deviceID != id else { return }
         deviceID = id
         refreshDevices()
         if running {
+            busy = true
             Task {
+                defer { busy = false }
                 await stop()
                 await start()
             }

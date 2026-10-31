@@ -18,7 +18,7 @@ public final class MIDIEngine {
     public var destinations: [MIDIDestination] = []
     public var selectedDestinationIDs: Set<String> = [] {
         didSet {
-            updateConnections()
+            if !synchronizingSession { updateConnections(previous: oldValue) }
         }
     }
     public var isConnected: Bool = false
@@ -29,6 +29,10 @@ public final class MIDIEngine {
 
     private let browserQueue = DispatchQueue(label: "local.livecue.app.MIDIBrowser")
     private var browser: NWBrowser?
+    private var resolving: [String: NWConnection] = [:]
+    private var sessionObserver: NSObjectProtocol?
+    private var synchronizingSession = false
+    public private(set) var sentMessageCount = 0
 
     private let session = MIDINetworkSession.default()
 
@@ -38,6 +42,10 @@ public final class MIDIEngine {
     public init() {
         setupCoreMIDI()
         setupNetworkSession()
+        refreshConnectionState()
+        sessionObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name(MIDINetworkNotificationSessionDidChange), object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshConnectionState() }
+        }
         startBonjourDiscovery()
     }
 
@@ -81,7 +89,10 @@ public final class MIDIEngine {
 
     private func resolveEndpoint(_ endpoint: NWEndpoint) {
         if case let .service(name, _, _, _) = endpoint {
+            let key = endpoint.debugDescription
+            guard resolving[key] == nil else { return }
             let connection = NWConnection(to: endpoint, using: .udp)
+            resolving[key] = connection
             connection.stateUpdateHandler = { [weak self, weak connection] state in
                 switch state {
                 case .ready:
@@ -96,6 +107,9 @@ public final class MIDIEngine {
                         }
                     }
                     connection?.cancel()
+                    Task { @MainActor [weak self] in self?.resolving.removeValue(forKey: key) }
+                case .failed, .cancelled:
+                    Task { @MainActor [weak self] in self?.resolving.removeValue(forKey: key) }
                 default:
                     break
                 }
@@ -130,43 +144,55 @@ public final class MIDIEngine {
         }
     }
 
-    private func updateConnections() {
-        // Disconnect unselected
+    private func updateConnections(previous: Set<String> = []) {
+        // Only an explicit deselection may remove a connection. Discovery must never
+        // tear down participants connected through Audio MIDI Setup.
         for connection in session.connections() {
-            let host = connection.host
-            let id = "\(host.address):\(host.port)"
-            if !selectedDestinationIDs.contains(id) {
+            let id = "\(connection.host.address):\(connection.host.port)"
+            if previous.subtracting(selectedDestinationIDs).contains(id) {
                 session.removeConnection(connection)
             }
         }
-
-        // Connect selected
         for id in selectedDestinationIDs {
-            if let host = hosts[id] {
-                let isAlreadyConnected = session.connections().contains(where: { $0.host == host })
-                if !isAlreadyConnected {
-                    let connection = MIDINetworkConnection(host: host)
-                    session.addConnection(connection)
+            if let host = hosts[id], !session.connections().contains(where: { $0.host.hasSameAddress(as: host) }) {
+                if !session.addConnection(MIDINetworkConnection(host: host)) {
+                    lastError = "Could not add MIDI connection to \(host.name)"
                 }
             }
         }
+        refreshConnectionState()
+    }
 
-        // Update connected state
-        var anyConnected = false
-        for i in 0..<destinations.count {
-            let id = destinations[i].id
-            let isConn = session.connections().contains(where: { "\($0.host.address):\($0.host.port)" == id })
-            destinations[i].isConnected = isConn
-            if isConn {
-                anyConnected = true
+    private func refreshConnectionState() {
+        let connections = session.connections()
+        synchronizingSession = true
+        defer { synchronizingSession = false }
+        for connection in connections {
+            let host = connection.host
+            let id = "\(host.address):\(host.port)"
+            hosts[id] = host
+            if !destinations.contains(where: { $0.id == id }) {
+                destinations.append(MIDIDestination(id: id, name: host.name, address: host.address, port: UInt16(clamping: host.port), isConnected: true, isManual: false))
+            }
+            selectedDestinationIDs.insert(id)
+        }
+        for i in destinations.indices {
+            destinations[i].isConnected = connections.contains { connection in
+                guard let host = hosts[destinations[i].id] else { return false }
+                return connection.host.hasSameAddress(as: host)
             }
         }
-        isConnected = anyConnected
+        isConnected = !connections.isEmpty
     }
 
     // MARK: - Sending MIDI
 
     private func sendUMP(words: [UInt32]) {
+        refreshConnectionState()
+        guard !session.connections().isEmpty else {
+            lastError = "No network MIDI participants. Connect the WING bridge Mac in Audio MIDI Setup or select it here."
+            return
+        }
         let destination = session.destinationEndpoint()
         if destination == 0 {
             lastError = "Network session destination endpoint not available"
@@ -181,6 +207,9 @@ public final class MIDIEngine {
         let status = MIDISendEventList(outputPort, destination, &eventList)
         if status != noErr {
             self.lastError = "Failed to send MIDI: \(status)"
+        } else {
+            lastError = nil
+            sentMessageCount += 1
         }
     }
 
@@ -266,6 +295,11 @@ public final class MIDIEngine {
     }
 
     private func sendSysEx(bytes: [UInt8]) {
+        refreshConnectionState()
+        guard !session.connections().isEmpty else {
+            lastError = "No network MIDI participants. Connect the WING bridge Mac in Audio MIDI Setup or select it here."
+            return
+        }
         let destination = session.destinationEndpoint()
         if destination == 0 {
             lastError = "Network session destination endpoint not available"
@@ -274,7 +308,11 @@ public final class MIDIEngine {
 
         var packetList = MIDIPacketList()
         var packet = MIDIPacketListInit(&packetList)
-        packet = MIDIPacketListAdd(&packetList, 1024, packet, 0, bytes.count, bytes)
+        guard bytes.count <= 256 else {
+            lastError = "SysEx exceeds MIDI packet capacity"
+            return
+        }
+        packet = MIDIPacketListAdd(&packetList, MemoryLayout<MIDIPacketList>.size, packet, 0, bytes.count, bytes)
 
         let status = MIDISend(outputPort, destination, &packetList)
         if status != noErr {

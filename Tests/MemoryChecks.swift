@@ -81,12 +81,21 @@ func reusedMonoBufferDoesNotOverwriteQueuedAudio() throws {
     expect(feeder.peak == 0.75)
 }
 
+func invalidInputDoesNotSilentlyReadAnotherChannel() throws {
+    let format = try require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+    let buffer = try require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 64))
+    buffer.frameLength = 64
+    let feeder = ChannelFeeder(channel: 2, target: format)
+    expect(feeder.feed(buffer) == nil)
+}
+
 @main struct MemoryChecks {
     static func main() async throws {
         try longTranscriptKeepsSmallWindowAndPreservesEveryLine()
         try archiveFailureRetainsRecentLines()
         try await liveAudioOverflowClosesQueueAndReportsFailure()
         try reusedMonoBufferDoesNotOverwriteQueuedAudio()
+        try invalidInputDoesNotSilentlyReadAnotherChannel()
         print("Passed: 20,000-line preservation and bounded window, archive failure, 1,000-buffer overload, audio buffer ownership")
     }
 }

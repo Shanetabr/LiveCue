@@ -37,7 +37,8 @@ final class ChannelFeeder: @unchecked Sendable {
 
     func feed(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         guard let data = buffer.floatChannelData, buffer.frameLength > 0 else { return nil }
-        let ch = max(0, min(channel, Int(buffer.format.channelCount) - 1))
+        guard channel >= 0, channel < Int(buffer.format.channelCount) else { return nil }
+        let ch = channel
         let frames = Int(buffer.frameLength)
 
         if mono == nil || mono!.sampleRate != buffer.format.sampleRate {
@@ -115,6 +116,15 @@ public final class AudioCapture: @unchecked Sendable {
 
     private var feederMap: [UUID: ChannelFeeder] = [:]
     private var hardwarePeak: Float = 0
+    private var receivedBuffers: UInt64 = 0
+    private var strongestInput = 0
+    public private(set) var openedFormat = ""
+
+    public func inputDiagnostics() -> (buffers: UInt64, strongestInput: Int, peak: Float) {
+        os_unfair_lock_lock(&lock)
+        defer { os_unfair_lock_unlock(&lock) }
+        return (receivedBuffers, strongestInput, hardwarePeak)
+    }
     private var lock = os_unfair_lock()
 
     public var onConfigurationChange: (@Sendable () -> Void)?
@@ -148,15 +158,34 @@ public final class AudioCapture: @unchecked Sendable {
             throw Failure(errorDescription: "That input device could not be selected (error \(status)).")
         }
 
-        let hwFormat = input.inputFormat(forBus: 0)
-        let tapSampleRate = hwFormat.sampleRate > 0 ? hwFormat.sampleRate : 48000
-        let tapChannels = max(1, hwFormat.channelCount)
-        guard let tapFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                            sampleRate: tapSampleRate,
-                                            channels: tapChannels,
-                                            interleaved: false) else {
-            throw Failure(errorDescription: "Unable to create 32-bit float audio tap format.")
+        var actualDevice = AudioDeviceID(0)
+        var deviceSize = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let query = AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &actualDevice, &deviceSize)
+        guard query == noErr, actualDevice == device else {
+            throw Failure(errorDescription: "The audio engine did not open the selected device (error \(query), device \(actualDevice)).")
         }
+        let hwFormat = input.inputFormat(forBus: 0)
+        guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
+            throw Failure(errorDescription: "Selected device has no active audio format. Start Dante Virtual Soundcard before recording.")
+        }
+        // Configure the input node's output bus, which is where recording taps read.
+        // Do not substitute a fabricated 48 kHz mono format for inactive hardware.
+        guard let tapFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                            sampleRate: hwFormat.sampleRate,
+                                            channels: hwFormat.channelCount,
+                                            interleaved: false) else {
+            throw Failure(errorDescription: "Unable to create audio tap format.")
+        }
+        for target in targets where target.channel < 0 || target.channel >= Int(hwFormat.channelCount) {
+            throw Failure(errorDescription: "Input \(target.channel + 1) is unavailable on the selected device (\(hwFormat.channelCount) inputs).")
+        }
+        var streamFormat = tapFormat.streamDescription.pointee
+        let formatStatus = AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1,
+                                                &streamFormat, UInt32(MemoryLayout<AudioStreamBasicDescription>.size))
+        guard formatStatus == noErr else {
+            throw Failure(errorDescription: "Could not configure selected device input format (error \(formatStatus)).")
+        }
+        openedFormat = "\(Int(hwFormat.sampleRate)) Hz / \(hwFormat.channelCount) inputs"
 
         struct FeederBinding: @unchecked Sendable {
             let feeder: ChannelFeeder
@@ -175,6 +204,8 @@ public final class AudioCapture: @unchecked Sendable {
         os_unfair_lock_lock(&lock)
         self.feederMap = map
         self.hardwarePeak = 0
+        self.receivedBuffers = 0
+        self.strongestInput = 0
         os_unfair_lock_unlock(&lock)
 
         input.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
@@ -185,14 +216,17 @@ public final class AudioCapture: @unchecked Sendable {
                 let frames = Int(buffer.frameLength)
                 let chCount = Int(buffer.format.channelCount)
                 var rawPeak: Float = 0
+                var strongest = 0
                 for c in 0..<chCount {
                     let ptr = data[c]
                     var channelPeak: Float = 0
                     vDSP_maxmgv(ptr, 1, &channelPeak, vDSP_Length(frames))
-                    rawPeak = max(rawPeak, channelPeak)
+                    if channelPeak > rawPeak { rawPeak = channelPeak; strongest = c }
                 }
                 os_unfair_lock_lock(&self.lock)
                 self.hardwarePeak = rawPeak
+                self.strongestInput = strongest
+                self.receivedBuffers += 1
                 os_unfair_lock_unlock(&self.lock)
             }
 
@@ -257,6 +291,8 @@ public final class AudioCapture: @unchecked Sendable {
         os_unfair_lock_lock(&lock)
         self.feederMap.removeAll()
         self.hardwarePeak = 0
+        self.receivedBuffers = 0
+        self.strongestInput = 0
         os_unfair_lock_unlock(&lock)
     }
 }

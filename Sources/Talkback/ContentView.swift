@@ -245,6 +245,7 @@ struct ContentView: View {
                 .overlay(RoundedRectangle(cornerRadius: 4).stroke(abletonBorder, lineWidth: 1))
             }
             .menuStyle(.borderlessButton)
+            .disabled(model.busy)
             .frame(maxWidth: 340, alignment: .leading)
 
             // Refresh Device Scan Button
@@ -474,6 +475,11 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // Ableton Track Strip across top of transcript
             channelStrip
+            Text(model.audioInputStatus)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+                .padding(.vertical, 4)
 
             ScrollViewReader { proxy in
                 ScrollView {
