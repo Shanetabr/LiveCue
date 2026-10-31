@@ -1,4 +1,6 @@
 import SwiftUI
+import CoreMIDI
+import AppKit
 
 // Ableton Live Theme Colors
 private let abletonBg = Color(red: 0.11, green: 0.11, blue: 0.11)
@@ -10,9 +12,7 @@ private let abletonAmber = Color(red: 1.0, green: 0.65, blue: 0.10)    // #FFA71
 
 struct MIDISettingsView: View {
     var model: Model
-    @State private var showingAddManualSheet = false
     @State private var testChannel: Int = 1
-    @State private var testNote: Int = 60
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +20,7 @@ struct MIDISettingsView: View {
             HStack {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(model.midiEngine.isConnected ? abletonMint : Color.gray)
+                        .fill(model.midiEngine.networkPortAvailable ? abletonMint : Color.gray)
                         .frame(width: 8, height: 8)
                     Text("NETWORK MIDI SESSION ROUTING")
                         .font(.system(size: 15, weight: .heavy, design: .monospaced))
@@ -30,11 +30,11 @@ struct MIDISettingsView: View {
                 Spacer()
 
                 Button {
-                    showingAddManualSheet = true
+                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Audio MIDI Setup.app"))
                 } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                        Text("MANUAL DESTINATION")
+                        Image(systemName: "network")
+                        Text("AUDIO MIDI SETUP")
                     }
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .padding(.horizontal, 10)
@@ -52,17 +52,73 @@ struct MIDISettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("WING OUTPUT & LAMP TEST").font(.headline)
+                        Picker("Send to", selection: Bindable(model.midiEngine).selectedUSBOutput) {
+                            Text("Network MIDI session (stage Mac)").tag(MIDIEndpointRef(0))
+                            ForEach(model.midiEngine.usbOutputs) { output in
+                                Text(output.name).tag(output.id)
+                            }
+                            if model.midiEngine.selectedUSBOutput != 0,
+                               !model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }) {
+                                Text("Selected WING USB port unavailable").tag(model.midiEngine.selectedUSBOutput)
+                            }
+                        }
+                        if model.midiEngine.selectedUSBOutput == 0 {
+                            Picker("Local network output", selection: Bindable(model.midiEngine).selectedNetworkOutputID) {
+                                Text("Choose a network port").tag(Optional<MIDIUniqueID>.none)
+                                ForEach(model.midiEngine.networkOutputs) { output in
+                                    Text(output.name).tag(Optional(output.id))
+                                }
+                                if let id = model.midiEngine.selectedNetworkOutputID,
+                                   !model.midiEngine.networkOutputs.contains(where: { $0.id == id }) {
+                                    Text("Selected network port unavailable").tag(Optional(id))
+                                }
+                            }
+                        }
+                        Button("Refresh MIDI ports") { model.midiEngine.refreshMIDIPorts() }
+                        Text("On the stage Mac, select its local network output. Connect the audio Mac as a participant in Audio MIDI Setup.")
+                            .font(.caption)
+                        Text("For direct USB, select WING Port 4 / MIDI Control. These buttons send channel 6, CC 16 to Layer 2 encoder 1 assigned to Lamp Brightness.")
+                            .font(.caption)
+                        HStack {
+                            Button("LAMP ON") { model.midiEngine.setWINGLamp(on: true) }
+                            Button("LAMP OFF") { model.midiEngine.setWINGLamp(on: false) }
+                            Button("FLASH 3 SECONDS") { model.midiEngine.flashWINGLamp() }
+                        }
+                        Text("Last sent: \(model.midiEngine.lastSentMIDI)").font(.system(.caption, design: .monospaced))
+                        Picker("Network receive port", selection: Bindable(model.midiEngine).selectedNetworkInputID) {
+                            Text("Choose a network port").tag(Optional<MIDIUniqueID>.none)
+                            ForEach(model.midiEngine.networkInputs) { input in
+                                Text(input.name).tag(Optional(input.id))
+                            }
+                            if let id = model.midiEngine.selectedNetworkInputID,
+                               !model.midiEngine.networkInputs.contains(where: { $0.id == id }) {
+                                Text("Selected network port unavailable").tag(Optional(id))
+                            }
+                        }
+                        Toggle("Bridge incoming Network MIDI to selected WING USB output", isOn: Bindable(model.midiEngine).bridgeNetworkToUSB)
+                            .disabled(!model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }))
+                        Text("On the audio Mac, use either this bridge or Audio MIDI Setup’s bottom Live routing to WING Port 4. Leave both Live routings blank when this bridge is on.")
+                            .font(.caption)
+                        Text("Network received: \(model.midiEngine.receivedNetworkMessages) • Forwarded to USB: \(model.midiEngine.forwardedMessages)")
+                        Text("Last received: \(model.midiEngine.lastReceivedMIDI)").font(.system(.caption, design: .monospaced))
+                    }
+                    .padding(14)
+                    .background(abletonCard)
+                    .cornerRadius(6)
+
                     // Status Banner
                     HStack(spacing: 14) {
-                        Image(systemName: model.midiEngine.isConnected ? "network" : "network.slash")
+                        Image(systemName: model.midiEngine.networkPortAvailable ? "network" : "network.slash")
                             .font(.system(size: 26))
-                            .foregroundStyle(model.midiEngine.isConnected ? abletonMint : Color(white: 0.5))
+                            .foregroundStyle(model.midiEngine.networkPortAvailable ? abletonMint : Color(white: 0.5))
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(model.midiEngine.isConnected ? "CONNECTED TO NETWORK MIDI SESSION" : "NO ACTIVE NETWORK DESTINATIONS CONNECTED")
+                            Text(model.midiEngine.networkPortAvailable ? "LOCAL NETWORK MIDI PORT AVAILABLE" : "SELECT AN AVAILABLE NETWORK MIDI PORT")
                                 .font(.system(size: 13, weight: .heavy, design: .monospaced))
-                                .foregroundStyle(model.midiEngine.isConnected ? abletonMint : .white)
-                            Text("Apple-MIDI (RTP-MIDI) transmits Universal MIDI Packets (UMP) and MSC SysEx over UDP port 5004 across local network.")
+                                .foregroundStyle(model.midiEngine.networkPortAvailable ? abletonMint : .white)
+                            Text("Check connected participants in Audio MIDI Setup. A local port being available does not confirm delivery to the audio Mac or WING.")
                                 .font(.caption)
                                 .foregroundStyle(Color(white: 0.65))
                         }
@@ -93,7 +149,7 @@ struct MIDISettingsView: View {
 
                     // Destinations List
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("ACTIVE & BONJOUR DISCOVERED ENDPOINTS")
+                        Text("DISCOVERED & SAVED NETWORK HOSTS")
                             .font(.system(size: 11, weight: .heavy, design: .monospaced))
                             .foregroundStyle(Color(white: 0.6))
 
@@ -102,7 +158,7 @@ struct MIDISettingsView: View {
                                 Text("Scanning local network for Bonjour Apple-MIDI hosts (_apple-midi._udp)…")
                                     .font(.system(size: 13))
                                     .foregroundStyle(Color(white: 0.7))
-                                Text("Or click 'MANUAL DESTINATION' to connect directly to QLab, Eos, or grandMA via IP.")
+                                Text("Add or connect a remote host in Audio MIDI Setup’s Network window.")
                                     .font(.caption)
                                     .foregroundStyle(Color(white: 0.5))
                             }
@@ -112,6 +168,9 @@ struct MIDISettingsView: View {
                             .cornerRadius(6)
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonBorder, lineWidth: 1))
                         } else {
+                            Text("Host discovery does not establish a connection. Connect the required participant in Audio MIDI Setup.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             VStack(spacing: 8) {
                                 ForEach(model.midiEngine.destinations) { dest in
                                     destinationRow(dest)
@@ -168,33 +227,10 @@ struct MIDISettingsView: View {
             }
         }
         .background(abletonBg)
-        .sheet(isPresented: $showingAddManualSheet) {
-            AddManualDestinationSheet(onAdd: { name, address, port in
-                model.midiEngine.addManualDestination(name: name, address: address, port: port)
-                model.midiEngine.selectedDestinationIDs.insert("\(address):\(port)")
-                model.saveConfig()
-                showingAddManualSheet = false
-            }, onCancel: {
-                showingAddManualSheet = false
-            })
-        }
     }
 
     private func destinationRow(_ dest: MIDIDestination) -> some View {
         HStack(spacing: 12) {
-            Toggle("", isOn: Binding(
-                get: { model.midiEngine.selectedDestinationIDs.contains(dest.id) },
-                set: { isSelected in
-                    if isSelected {
-                        model.midiEngine.selectedDestinationIDs.insert(dest.id)
-                    } else {
-                        model.midiEngine.selectedDestinationIDs.remove(dest.id)
-                    }
-                    model.saveConfig()
-                }
-            ))
-            .labelsHidden()
-
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(dest.name)
@@ -219,11 +255,6 @@ struct MIDISettingsView: View {
                             .cornerRadius(3)
                     }
 
-                    if dest.isConnected {
-                        Text("CONNECTED")
-                            .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                            .foregroundStyle(abletonMint)
-                    }
                 }
 
                 Text("\(dest.address):\(dest.port)")
@@ -233,67 +264,10 @@ struct MIDISettingsView: View {
 
             Spacer()
 
-            Button("TEST NOTE") {
-                model.midiEngine.sendNoteOn(channel: 0, note: 60, velocity: 127)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    model.midiEngine.sendNoteOff(channel: 0, note: 60, velocity: 0)
-                }
-            }
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Color(white: 0.16))
-            .cornerRadius(4)
         }
         .padding(12)
         .background(abletonCard)
         .cornerRadius(6)
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonBorder, lineWidth: 1))
-    }
-}
-
-struct AddManualDestinationSheet: View {
-    var onAdd: (String, String, UInt16) -> Void
-    var onCancel: () -> Void
-
-    @State private var name: String = "Lighting Console"
-    @State private var address: String = "192.168.1.50"
-    @State private var portString: String = "5004"
-
-    var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Text("ADD NETWORK MIDI HOST")
-                    .font(.system(size: 15, weight: .heavy, design: .monospaced))
-                    .foregroundStyle(.white)
-                Spacer()
-            }
-
-            Form {
-                TextField("Destination Name (e.g. QLab Mac Mini, Eos Ion)", text: $name)
-                TextField("IP Address or Hostname", text: $address)
-                TextField("Port (standard Apple-MIDI is 5004)", text: $portString)
-            }
-            .formStyle(.grouped)
-
-            HStack {
-                Button("Cancel", action: onCancel)
-                    .keyboardShortcut(.cancelAction)
-                Spacer()
-                Button("Add & Connect") {
-                    let port = UInt16(portString) ?? 5004
-                    onAdd(name, address, port)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(abletonMint)
-                .foregroundStyle(.black)
-                .keyboardShortcut(.defaultAction)
-                .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(16)
-        .frame(minWidth: 420, minHeight: 270)
-        .background(abletonBg)
     }
 }
