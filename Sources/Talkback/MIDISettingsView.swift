@@ -73,6 +73,10 @@ struct MIDISettingsView: View {
                     .cornerRadius(6)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonBorder, lineWidth: 1))
 
+                    Text("CoreMIDI accepted messages: \(model.midiEngine.sentMessageCount). This confirms local sending, not receipt by the WING.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     if let err = model.midiEngine.lastError {
                         HStack(spacing: 8) {
                             Image(systemName: "exclamationmark.triangle.fill")

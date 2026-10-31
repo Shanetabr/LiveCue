@@ -211,3 +211,19 @@ These check a 20,000-line transcript round trip, archive write failure,
 bounded audio overload behavior, and queued audio ownership during buffer reuse.
 They do not measure Apple's speech-engine RAM consumption; live multi-channel
 memory and latency still depend on hardware, audio format, and enabled channels.
+
+### Troubleshooting MIDI and Dante input (v1.1.1)
+
+LiveCue preserves participants connected in Audio MIDI Setup and imports them
+into its Network MIDI list. Explicitly switching a destination off still
+removes that participant. The session broadcasts to its connected participants.
+The accepted-message counter confirms a successful local CoreMIDI send, not
+receipt by the other Mac or the WING. On the USB bridge Mac, route incoming
+network MIDI (bottom Live routings selector) to WING Port 4 / MIDI Control.
+
+With recording running, the transcript tab reports the opened audio format and
+whether the selected device is delivering callbacks, silent buffers, or signal
+on a particular input. Select Dante Virtual Soundcard and enable a track mapped
+to Input 1 when the mic is subscribed to Dante receive channel 1. Device selection
+is verified against the opened AudioUnit. Inactive formats fail explicitly.
+Hardware behavior still requires checking on the actual Dante/WING system.
