@@ -2,6 +2,8 @@
 
 Updated October 31, 2026 (America/New_York).
 
+**Nov 2026 update:** network MIDI reaches the audio MacBook and flashes the lamp through the helper bridge, but not through Audio MIDI Setup Live routing. See [docs/NETWORK_MIDI_FINDINGS.md](docs/NETWORK_MIDI_FINDINGS.md).
+
 ## Goal and current result
 
 Saying **“Front of House”** on the stage Mac must flash the Behringer WING
