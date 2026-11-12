@@ -11,7 +11,7 @@ show.
 
 ![LiveCue transcribing a comms channel live](docs/screenshot.png)
 
-[**Download v1.1.1**](https://github.com/danielshaji1/LiveCue-Talkback/releases/latest) · [How it works](#how-it-works) · [Status](#status)
+[**Download LiveCue**](../../releases/latest) · [How it works](#how-it-works) · [Status](#status)
 
 ---
 
