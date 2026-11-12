@@ -170,11 +170,26 @@ public final class AudioCapture: @unchecked Sendable {
         }
         // Configure the input node's output bus, which is where recording taps read.
         // Do not substitute a fabricated 48 kHz mono format for inactive hardware.
-        guard let tapFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+        // The channels: initializer returns nil above two channels, so devices with
+        // more inputs (Dante Virtual Soundcard, larger interfaces) need an explicit
+        // discrete channel layout.
+        let channelCount = hwFormat.channelCount
+        let candidateFormat: AVAudioFormat?
+        if channelCount <= 2 {
+            candidateFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
                                             sampleRate: hwFormat.sampleRate,
-                                            channels: hwFormat.channelCount,
-                                            interleaved: false) else {
-            throw Failure(errorDescription: "Unable to create audio tap format.")
+                                            channels: channelCount,
+                                            interleaved: false)
+        } else if let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | channelCount) {
+            candidateFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
+                                            sampleRate: hwFormat.sampleRate,
+                                            interleaved: false,
+                                            channelLayout: layout)
+        } else {
+            candidateFormat = nil
+        }
+        guard let tapFormat = candidateFormat else {
+            throw Failure(errorDescription: "Unable to create audio tap format for \(channelCount) inputs.")
         }
         for target in targets where target.channel < 0 || target.channel >= Int(hwFormat.channelCount) {
             throw Failure(errorDescription: "Input \(target.channel + 1) is unavailable on the selected device (\(hwFormat.channelCount) inputs).")
