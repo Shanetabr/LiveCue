@@ -9,9 +9,7 @@ Apple's new on-device `SpeechAnalyzer` / `SpeechTranscriber` APIs (macOS 26).
 No audio leaves the machine and no internet connection is needed during a
 show.
 
-![LiveCue transcribing three comms channels, with a keyword rule firing](docs/screenshot.png)
-
-<sub>A test session on a MacBook's built-in mic: three channels are mapped to the same input, so each line shows once per channel. The banner shows the "standby" rule firing.</sub>
+![LiveCue transcribing a comms channel live](docs/screenshot.png)
 
 [**Download v1.1.1**](https://github.com/danielshaji1/LiveCue-Talkback/releases/latest) · [How it works](#how-it-works) · [Status](#status)
 
@@ -44,6 +42,10 @@ show.
 - **Export** the transcript as TXT, CSV or SRT subtitles.
 - **Built for long shows**: audio queues are bounded, older transcript lines
   are archived to disk, and a regression test covers a 20,000-line session.
+
+| Keyword rules | Network MIDI |
+| --- | --- |
+| ![Keyword and show control rules](docs/screenshot-rules.png) | ![Network MIDI routing and WING lamp test](docs/screenshot-network-midi.png) |
 
 ## How it works
 
