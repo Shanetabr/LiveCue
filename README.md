@@ -4,6 +4,9 @@
 live talkback audio on the device and turns spoken keywords into MIDI show
 control: QLab cues, MIDI Show Control for lighting desks, or console macros.
 
+For anywhere a crew talks on comms: theatre, concerts, broadcast, conferences and
+houses of worship.
+
 It is an open-source take on what [ProdCom](https://prodcom.io) does, built on
 Apple's new on-device `SpeechAnalyzer` / `SpeechTranscriber` APIs (macOS 26).
 No audio leaves the machine and no internet connection is needed during a
