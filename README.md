@@ -1,231 +1,178 @@
-# LiveCue Talkback
+# LiveCue
 
-Current development status and next hardware checks: [Claude Opus handoff](CLAUDE_OPUS_HANDOFF.md).
+**Say a word on comms, fire a cue.** LiveCue is a macOS app that transcribes
+live talkback audio on the device and turns spoken keywords into MIDI show
+control: QLab cues, MIDI Show Control for lighting desks, or console macros.
 
-**An open-source ProdCom alternative for macOS.**
+It is an open-source take on what [ProdCom](https://prodcom.io) does, built on
+Apple's new on-device `SpeechAnalyzer` / `SpeechTranscriber` APIs (macOS 26).
+No audio leaves the machine and no internet connection is needed during a
+show.
 
-LiveQ is a real-time speech-to-text transcription and show-control automation application designed for live entertainment production, broadcast, theater, and corporate events. It listens to multi-channel audio feeds (from USB/Thunderbolt interfaces or **Dante Virtual Soundcard**) and triggers network MIDI cues (to QLab, ETC Eos, grandMA, etc.) based on spoken keywords and phrases.
-
----
-
-## Features
-
-- 🎙️ **On-Device Live Speech Transcription**
-  - Powered by Apple's macOS 26+ `SpeechTranscriber` and `SpeechAnalyzer` framework.
-  - 100% on-device processing — no cloud dependencies, zero audio leaves the machine, zero internet required during showtime.
-  - Low-latency streaming recognition with instant volatile partials and settled final lines.
-
-- 🎛️ **Simultaneous Multi-Channel Transcription**
-  - Transcribe multiple comms feeds simultaneously (e.g., FOH Comms, Stage Manager, Lighting Director).
-  - Single CoreAudio tap feeds independent `ChannelFeeder` and `SpeechTranscriber` instances with zero driver contention.
-  - Chat-style interleaved transcript view with custom color-coded speaker badges and per-channel live meters.
-  - Channel filter scoping on keyword rules (rules can trigger universally or only on specific comms channels).
-
-- 🎚️ **Pro Audio & Dante Virtual Soundcard Support**
-  - Direct CoreAudio device enumeration with channel assignment (supports interfaces with 2 to 64+ channels).
-  - Works out of the box with **Dante Virtual Soundcard (DVS)**, AVB, USB, and virtual audio loopbacks.
-  - Real-time dB peak level meters per channel.
-
-- 🌐 **Network MIDI (Apple-MIDI / RTP-MIDI)**
-  - Select actual CoreMIDI network inputs and outputs; manage RTP-MIDI participants in Audio MIDI Setup.
-  - Automatic **Bonjour discovery** (`_apple-midi._udp`) of show control machines on the local network.
-  - Add fixed IP/host participants in Audio MIDI Setup; discovered hosts in LiveCue are informational.
-  - Sends MIDI 1.0 bytes and bounded SysEx through CoreMIDI, with WING USB selection and an optional receive bridge.
-
-- ⚡️ **Keyword → Show Control Trigger Engine**
-  - **Match Modes:** Contains phrase, Exact line match, or Prefix matching.
-  - **Trigger Actions:**
-    - **MIDI Note On / Note Off** (channels 1–16, notes 0–127, velocities 0–127) — *Standard for QLab cue triggers*.
-    - **MIDI Control Change (CC)** (controllers 0–127, values 0–127).
-    - **MIDI Program Change** (programs 0–127).
-    - **MIDI Show Control (MSC)** (RP-002 SysEx: Device ID, Command Format, Command `GO`/`STOP`/`FIRE`, Cue Number & List) — *Standard for ETC Eos and grandMA*.
-    - **Visual Alert** (flashes the Talkback screen border to silently alert operators).
-  - **Cooldown Protection:** Configurable per-rule trigger cooldown (0.2s – 10.0s) to prevent transcription jitter from multi-firing cues.
-  - **Rule Testing:** Dedicated "Test" buttons to test triggers instantly without speaking.
-
-- 💾 **Session File Management (Word-style Save / Save As / Open / Recent)**
-  - Full show session persistence in native `.livecue` format.
-  - Save (`⌘S`), Save As (`⇧⌘S`), Open (`⌘O`), and Open Recent submenu.
-  - Includes session transcripts, channel names & color configurations, keyword rules, audio device references, and trigger activity logs.
-  - Double-click `.livecue` files in Finder to launch and restore sessions directly.
-
-- ⚙️ **Automatic Configuration Persistence**
-  - App preferences, default channel setup, rules, and MIDI destinations persist to `~/Library/Application Support/LiveCue/config.json`.
-
-- 📄 **Transcript Export**
-  - Export live transcript to:
-    - **Plain Text (.txt)** with timestamps.
-    - **CSV (.csv)** with ISO8601 timestamps, channel labels, and sanitized text.
-    - **SubRip Subtitles (.srt)** with automatic display intervals.
-  - Copy directly to clipboard or save to file.
-
-- 💻 **CLI Audio File Check Mode**
-  - Headless transcription of audio files for offline testing: `LiveCue --file path/to/file.wav [channel]`.
+[**Download v1.1.1**](https://github.com/danielshaji1/LiveCue-Talkback/releases/latest) · [How it works](#how-it-works) · [Status](#status)
 
 ---
 
-## System Requirements
+## What it does
 
-- **Operating System:** macOS Tahoe 26.0 or later (uses Apple's modern `SpeechTranscriber` engine).
-- **Architecture:** Apple Silicon (M1/M2/M3/M4) recommended for hardware-accelerated on-device neural transcription.
-- **Xcode:** Xcode 26.0+ command-line tools.
+```
+ comms mic ─► audio interface / Dante ─► LiveCue ─► transcript on screen
+                                            │
+                     "Front of House" ──────┴─► MIDI ─► QLab · Eos · grandMA · WING
+```
 
----
+- **Live transcript of up to 6 comms channels at once.** One CoreAudio tap
+  feeds a separate speech transcriber per channel. The transcript is
+  chat-style, with colored speaker badges and a level meter per channel.
+- **Keyword rules → show control.** Contains, exact or prefix matching, an
+  optional per-channel scope, and a per-rule cooldown so recognition jitter
+  can't double-fire a cue. Actions:
+  - MIDI Note On/Off, Control Change, Program Change
+  - **MIDI Show Control** (RP-002 SysEx: GO / STOP / RESUME / FIRE with cue and list)
+  - a visual alert that flashes the screen border
+- **Network MIDI (RTP-MIDI)** through real CoreMIDI network endpoints, plus
+  Bonjour discovery of `_apple-midi._udp` hosts, direct USB output, and an
+  optional network-to-USB bridge.
+- **Pro audio inputs**: any CoreAudio device, including Dante Virtual
+  Soundcard, AVB and USB interfaces, with per-input channel mapping.
+- **Show files**: `.livecue` session documents with Save / Save As / Open
+  Recent, holding transcript, channels, rules and the trigger log.
+- **Export** the transcript as TXT, CSV or SRT subtitles.
+- **Built for long shows**: audio queues are bounded, older transcript lines
+  are archived to disk, and a regression test covers a 20,000-line session.
 
-## Installation & Building
+## How it works
 
-Build using Swift Package Manager or the bundled release build script:
+```
+┌──────────────────────────────────────────────┐
+│ Audio device (interface, mic, Dante DVS)     │
+└──────────────────────┬───────────────────────┘
+                       │  one AVAudioEngine input tap
+        ┌──────────────┼──────────────┐
+  ChannelFeeder  ChannelFeeder  ChannelFeeder     pick one input, downmix, resample
+        │              │              │
+   Transcriber    Transcriber    Transcriber      SpeechAnalyzer + SpeechTranscriber
+        └──────────────┼──────────────┘           (volatile partials + settled lines)
+                       ▼
+                     Model ─────────────► SwiftUI (transcript, meters, rules, log)
+                       │
+                KeywordMatcher               match mode, channel scope, cooldown
+                       │
+                   MIDIEngine                CoreMIDI: network, USB, MSC SysEx
+```
 
-```bash
-# Debug build (with complete strict concurrency)
-swift build -Xswiftc -strict-concurrency=complete
+| File | Role |
+| --- | --- |
+| [`AudioCapture.swift`](Sources/Talkback/AudioCapture.swift) | Multi-channel tap, per-channel feeders, bounded queues |
+| [`Transcriber.swift`](Sources/Talkback/Transcriber.swift) | Wraps `SpeechAnalyzer` / `SpeechTranscriber` |
+| [`KeywordMatcher.swift`](Sources/Talkback/KeywordMatcher.swift) | Rule matching and cooldowns |
+| [`MIDIEngine.swift`](Sources/Talkback/MIDIEngine.swift), [`MIDIWire.swift`](Sources/Talkback/MIDIWire.swift) | Endpoint selection, MIDI 1.0 bytes, MSC, bridge |
+| [`Model.swift`](Sources/Talkback/Model.swift) | Orchestrates capture, transcription, rules and sessions |
+| [`TranscriptArchive.swift`](Sources/Talkback/TranscriptArchive.swift) | Moves older lines to disk in atomic batches |
 
-# Run directly
-swift run LiveCue
+It is Swift 6 with complete strict concurrency, Swift Package Manager, and
+**no third-party dependencies**: only AVFoundation, Speech, CoreAudio,
+CoreMIDI, Network and SwiftUI.
 
-# Build release .app bundle with embedded logo (outputs to dist/LiveCue.app)
-./build.sh
+## Requirements
 
-# Open the compiled app
+- macOS 26 (Tahoe) or later. The `SpeechTranscriber` API is new in macOS 26.
+- Apple Silicon recommended.
+- To build: Xcode 26 command-line tools (Swift 6).
+
+## Build and run
+
+```sh
+swift build -Xswiftc -strict-concurrency=complete   # debug build
+swift run LiveCue                                   # run it
+
+./build.sh                                          # signed dist/LiveCue.app
 open dist/LiveCue.app
 ```
 
----
+Transcribe a file without any audio hardware:
 
-## Show Control Quickstart
-
-### 1. Connecting to QLab via Network MIDI
-1. On your QLab machine, open **Audio MIDI Setup** > **MIDI Studio** > **Network**.
-2. Enable your Session and set "Who may connect to me" to **Anyone**.
-3. In Talkback, open the **Network MIDI** tab.
-4. Your QLab machine will appear under **Active & Discovered Destinations**. Toggle it on, or add its IP manually (Port `5004`).
-5. In Talkback's **Keyword Rules** tab, add a rule:
-   - Keyword: `go`
-   - Action: `MIDI Note On` -> Channel `1`, Note `60` (C4), Velocity `127`.
-6. In QLab, set your cue's MIDI trigger to Note 60 on Channel 1. When the speaker says "go", QLab fires.
-
-### 2. Controlling Lighting Desks (ETC Eos / grandMA) via MSC
-1. In Talkback, add a keyword rule with action **MIDI Show Control (MSC)**:
-   - Device ID: `1` (or matching console ID)
-   - Command: `GO (0x01)`
-   - Cue Number: `101`
-2. Talkback packages the SysEx bytes (`F0 7F <dev> 02 01 01 31 30 31 F7`) and transmits directly over the network session.
-
----
-
-## Architecture Overview
-
-```
-┌────────────────────────────────────────────────────────┐
-│                      Audio Source                      │
-│   (Hardware Interface, Mic, or Dante Virtual Soundcard)│
-└───────────────────────────┬────────────────────────────┘
-                            │
-                   AVAudioEngine Tap
-                            │
-                 ┌──────────▼──────────┐
-                 │    ChannelFeeder    │ (Mono extraction & resample to 16kHz)
-                 └──────────┬──────────┘
-                            │
-                 ┌──────────▼──────────┐
-                 │     Transcriber     │ (Apple SpeechAnalyzer / SpeechTranscriber)
-                 └──────────┬──────────┘
-                            │
-               Settled Text / Volatile Partials
-                            │
-                 ┌──────────▼──────────┐
-                 │        Model        │ (Orchestrator & State Manager)
-                 └───┬───────────────┬─┘
-                     │               │
-        ┌────────────▼─────┐   ┌─────▼────────────┐
-        │  KeywordMatcher  │   │   ContentView    │ (SwiftUI Interface)
-        └────────────┬─────┘   └──────────────────┘
-                     │
-              Matched Action
-                     │
-        ┌────────────▼─────┐
-        │    MIDIEngine    │ (CoreMIDI MIDINetworkSession & RTP-MIDI)
-        └──────────────────┘
+```sh
+swift run LiveCue --file speech.wav        # first channel
+swift run LiveCue --file multitrack.wav 2  # channel 2
 ```
 
----
+## Tests
 
-## CLI Usage
+```sh
+sh scripts/test-memory.sh   # 20,000-line round trip, archive failure, audio overload, buffer ownership
 
-You can test transcription without hardware inputs by providing an audio file:
-
-```bash
-# Transcribe speech.wav (first channel)
-swift run LiveCue --file /path/to/speech.wav
-
-# Transcribe channel 2 of a multi-track recording
-swift run LiveCue --file /path/to/multitrack.wav 2
+# virtual CoreMIDI send/receive, endpoint renames, missing outputs
+swiftc -parse-as-library -swift-version 6 -strict-concurrency=complete \
+  Sources/Talkback/MIDIEngine.swift Sources/Talkback/MIDIWire.swift \
+  scripts/NetworkMIDITest.swift -o /tmp/livecue-network-test && /tmp/livecue-network-test
 ```
 
----
+None of these need a microphone or a speech-model download.
+
+## Quickstart: fire a QLab cue by voice
+
+1. On both Macs, open **Audio MIDI Setup → MIDI Studio → Network**, enable a
+   session, and connect the other Mac as a participant.
+2. In LiveCue's **Network MIDI** tab, pick that session as the network output.
+3. In **Rules**, add a rule: keyword `go`, action **MIDI Note On**,
+   channel 1, note 60, velocity 127. Press **Test** to fire it without
+   speaking.
+4. In QLab, give the cue a MIDI trigger of note 60 on channel 1.
+5. Start transcription and say "go".
+
+**Lighting desks (ETC Eos, grandMA)**: use a **MIDI Show Control** action,
+for example device 1, `GO`, cue 101. LiveCue sends
+`F0 7F 01 02 01 01 31 30 31 F7`.
+
+**Behringer WING**: the **WING FOH PRESET** button in Rules adds a
+"Front of House" rule that flashes the console lamp (channel 6, CC 16) for
+three seconds. Console and receiving-Mac setup is in
+[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) and
+[`tools/WINGLampReceiver`](tools/WINGLampReceiver/README.md).
+
+## Status
+
+LiveCue is a working prototype that has been tested on real show hardware.
+
+**Verified on hardware**
+- Network MIDI from the stage Mac reaches a second Mac and flashes a WING
+  console lamp through a small CoreMIDI bridge
+  ([findings](docs/dev-notes/NETWORK_MIDI_FINDINGS.md)).
+- Direct USB to the WING from the stage Mac.
+
+**Not yet verified end to end**
+- The spoken rule → network → console path in a single live run.
+- Dante Virtual Soundcard capture with more than two inputs.
+- macOS's own Audio MIDI Setup "Live routing" didn't forward to the WING on
+  a 2016 MacBook running Monterey. The bridge works around it.
+
+**Known limits**
+- English only (`en-US`).
+- The built-in bridge forwards every message it receives. The standalone
+  WING helper forwards only the lamp control.
+- One send is capped at 256 bytes, so very large SysEx is rejected.
+- Opening, saving or exporting a very long session loads its whole
+  transcript into memory.
+
+## Repository layout
+
+```
+Sources/Talkback/      the app (target: LiveCue)
+Tests/                 memory and long-session checks
+scripts/               test runners and hardware diagnostics
+tools/WINGLampReceiver standalone macOS 11+ bridge for the console-side Mac
+docs/                  troubleshooting, MIDI/MSC protocol reference, ProdCom feature analysis
+docs/dev-notes/        handoff and findings notes from development
+plans/                 runbooks for upcoming hardware tests
+```
+
+## How it was built
+
+LiveCue was built with AI coding agents, Claude among them. The handoff notes
+the agents wrote between sessions, including the hardware debugging log, are
+in [`docs/dev-notes`](docs/dev-notes/README.md).
 
 ## License
 
-Open-source under the MIT License. See [LICENSE](LICENSE) for details.
-
-### WING “Front of House” lamp test
-
-In Keyword Rules, click **WING FOH PRESET**. This adds a case-insensitive
-contains-phrase rule with a 3.2-second cooldown. Its Test button and spoken
-“Front of House” send MIDI channel **6**, CC **16**, alternating **127 / 0**
-every 250 ms for three seconds, ending at **0** (off). Retriggering restarts
-the three-second sequence. The mapping matches Layer 2, encoder 1 assigned
-to OTHER → LAMP BRIGHTNESS in the supplied console photos.
-
-Connect this app's Network MIDI destination to the receiving Mac's enabled
-Network MIDI session. On that Mac, bridge the network session input to the
-WING USB **remote-control** MIDI destination (not its DAW control port).
-Enable **Custom Controls (RX Only) → USB** in WING Setup → MIDI.
-Keep Layer 2 encoder 1 assigned to Lamp Brightness. First use the rule's
-**Test** button, then start transcription and say “Front of House”.
-The app sends through the selected network destinations; select only the
-intended bridge for this test. Physical lamp response needs verification
-on the connected console.
-
-### Memory and long sessions
-
-Live audio input is bounded to 32 queued buffers per channel. If recognition
-cannot keep up, capture stops with a visible error; lower the enabled channel
-count before restarting. File transcription waits for queue capacity instead
-of dropping audio. Mono conversion scratch buffers are reused, while buffers
-queued for recognition remain independently owned. Peak metering uses Accelerate.
-
-The live transcript keeps 500–600 recent lines. Older lines are archived in
-atomic batches in the system temporary directory and included in session saves
-and exports. Clear/New Session removes that session's temporary history. If an
-archive write fails, lines stay in memory and a status message reports the error.
-Save sessions normally to keep them permanently. Opening, saving, and exporting
-large sessions still temporarily materializes the full transcript in memory.
-Export previews are snapshots and are generated once per selected format.
-
-Regression checks (no microphone or speech model download required):
-
-```sh
-sh scripts/test-memory.sh
-```
-
-These check a 20,000-line transcript round trip, archive write failure,
-bounded audio overload behavior, and queued audio ownership during buffer reuse.
-They do not measure Apple's speech-engine RAM consumption; live multi-channel
-memory and latency still depend on hardware, audio format, and enabled channels.
-
-### Troubleshooting MIDI and Dante input (v1.1.1)
-
-LiveCue preserves participants connected in Audio MIDI Setup and imports them
-into its Network MIDI list. Explicitly switching a destination off still
-removes that participant. The session broadcasts to its connected participants.
-The accepted-message counter confirms a successful local CoreMIDI send, not
-receipt by the other Mac or the WING. On the USB bridge Mac, route incoming
-network MIDI (bottom Live routings selector) to WING Port 4 / MIDI Control.
-
-With recording running, the transcript tab reports the opened audio format and
-whether the selected device is delivering callbacks, silent buffers, or signal
-on a particular input. Select Dante Virtual Soundcard and enable a track mapped
-to Input 1 when the mic is subscribed to Dante receive channel 1. Device selection
-is verified against the opened AudioUnit. Inactive formats fail explicitly.
-Hardware behavior still requires checking on the actual Dante/WING system.
+MIT. See [LICENSE](LICENSE).
