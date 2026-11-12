@@ -9,7 +9,7 @@ Apple's new on-device `SpeechAnalyzer` / `SpeechTranscriber` APIs (macOS 26).
 No audio leaves the machine and no internet connection is needed during a
 show.
 
-[**Download the latest release**](../../releases/latest) · [How it works](#how-it-works) · [Status](#status)
+[**Download v1.1.1**](https://github.com/danielshaji1/LiveCue-Talkback/releases/latest) · [How it works](#how-it-works) · [Status](#status)
 
 ---
 
@@ -164,6 +164,7 @@ scripts/               test runners and hardware diagnostics
 tools/WINGLampReceiver standalone macOS 11+ bridge for the console-side Mac
 docs/                  troubleshooting, MIDI/MSC protocol reference, ProdCom feature analysis
 docs/dev-notes/        handoff and findings notes from development
+plans/                 runbooks for upcoming hardware tests
 ```
 
 ## How it was built
