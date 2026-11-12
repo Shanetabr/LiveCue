@@ -1,14 +1,14 @@
 # Network MIDI findings — WING lamp (Nov 2026)
 
-Continues [CLAUDE_OPUS_HANDOFF.md](../CLAUDE_OPUS_HANDOFF.md). These are the
+Continues [CLAUDE_OPUS_HANDOFF.md](CLAUDE_OPUS_HANDOFF.md). These are the
 hardware results from testing on the stage Mac.
 
 ## Setup
 
 ```text
-Stage Mac (Shane's MacBook Pro, macOS 26, Ethernet only, 10.1.10.121)
+Stage Mac (MacBook Pro, macOS 26, Ethernet only)
   -> Network RTP Session 1 (Apple RTP-MIDI)
-  -> CalvaryAudio's MacBook Pro (MacBook Pro 15" 2016, macOS Monterey 12.7.6)
+  -> Audio MacBook (MacBook Pro 15" 2016, macOS Monterey 12.7.6)
   -> USB, WING Port 4
   -> WING Layer 2 encoder 1 = Lamp Brightness (ch 6, CC 16)
 ```
@@ -40,8 +40,8 @@ through the audio MacBook.
   dropping some MIDI ([better-live-routings](https://github.com/coffeeshopped/better-live-routings)).
 - That 2016 MacBook is likely limited to Monterey, so LiveCue (macOS 26+)
   can't run there as the bridge.
-- The audio MacBook showed two addresses on the network (10.1.10.77 and
-  10.1.10.130), probably Ethernet and Wi-Fi. That probably isn't the cause,
+- The audio MacBook showed two addresses on the network (Ethernet and
+  Wi-Fi, most likely). That probably isn't the cause,
   since the helper received everything, but it hasn't been ruled out.
 
 ## Still to try without the helper

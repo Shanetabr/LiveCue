@@ -1,6 +1,6 @@
 # LiveCue — Agent Handoff for Claude
 
-> Historical handoff. Read the current [Claude Opus handoff](../CLAUDE_OPUS_HANDOFF.md) first; it supersedes MIDI implementation and hardware-status claims below.
+> Historical handoff. Read the current [Claude Opus handoff](CLAUDE_OPUS_HANDOFF.md) first; it supersedes MIDI implementation and hardware-status claims below.
 
 > **Target Audience:** Claude (or any subsequent AI agent picking up LiveCue development).  
 > **Last Updated:** 2026-10-07  

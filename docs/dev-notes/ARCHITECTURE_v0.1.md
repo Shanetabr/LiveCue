@@ -218,8 +218,8 @@ swift build -c release  # Release build
 - **Network.framework** — `NWBrowser` for Bonjour discovery
 
 ### Related Documents
-- [PRODCOM_ANALYSIS.md](PRODCOM_ANALYSIS.md) — Full ProdCom feature inventory and competitive analysis
-- [MIDI_OSC_REFERENCE.md](MIDI_OSC_REFERENCE.md) — Byte-level MIDI/OSC specs, CoreMIDI Swift code, QLab/Eos/grandMA integration
+- [PRODCOM_ANALYSIS.md](../PRODCOM_ANALYSIS.md) — Full ProdCom feature inventory and competitive analysis
+- [MIDI_OSC_REFERENCE.md](../MIDI_OSC_REFERENCE.md) — Byte-level MIDI/OSC specs, CoreMIDI Swift code, QLab/Eos/grandMA integration
 
 ### Questions Still Open (Need User Input)
 1. **Channel count target** — How many simultaneous channels? (ProdCom handles 4–8+)
