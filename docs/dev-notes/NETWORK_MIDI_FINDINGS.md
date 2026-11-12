@@ -1,6 +1,6 @@
 # Network MIDI findings — WING lamp (Nov 2026)
 
-Continues [CLAUDE_OPUS_HANDOFF.md](../CLAUDE_OPUS_HANDOFF.md). These are the
+Continues [CLAUDE_OPUS_HANDOFF.md](CLAUDE_OPUS_HANDOFF.md). These are the
 hardware results from testing on the stage Mac.
 
 ## Setup
@@ -40,8 +40,8 @@ through the audio MacBook.
   dropping some MIDI ([better-live-routings](https://github.com/coffeeshopped/better-live-routings)).
 - That 2016 MacBook is likely limited to Monterey, so LiveCue (macOS 26+)
   can't run there as the bridge.
-- The audio MacBook showed two addresses on the network (<lan-ip> and
-  <lan-ip>), probably Ethernet and Wi-Fi. That probably isn't the cause,
+- The audio MacBook showed two addresses on the network (Ethernet and
+  Wi-Fi, most likely). That probably isn't the cause,
   since the helper received everything, but it hasn't been ruled out.
 
 ## Still to try without the helper

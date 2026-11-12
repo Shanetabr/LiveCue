@@ -1,6 +1,6 @@
 # Talkback — Agent Handoff Document (Cycle 2)
 
-> Historical handoff. Current status: [Claude Opus handoff](../CLAUDE_OPUS_HANDOFF.md).
+> Historical handoff. Current status: [Claude Opus handoff](CLAUDE_OPUS_HANDOFF.md).
 
 **Date:** 2026-10-07  
 **Status:** Build passing (`swift build` ✅, `./build.sh` dist app bundle ✅)  
