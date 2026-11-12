@@ -9,6 +9,10 @@ Apple's new on-device `SpeechAnalyzer` / `SpeechTranscriber` APIs (macOS 26).
 No audio leaves the machine and no internet connection is needed during a
 show.
 
+![LiveCue transcribing three comms channels, with a keyword rule firing](docs/screenshot.png)
+
+<sub>A test session on a MacBook's built-in mic: three channels are mapped to the same input, so each line shows once per channel. The banner shows the "standby" rule firing.</sub>
+
 [**Download v1.1.1**](https://github.com/danielshaji1/LiveCue-Talkback/releases/latest) · [How it works](#how-it-works) · [Status](#status)
 
 ---
