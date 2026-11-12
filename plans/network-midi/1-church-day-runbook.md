@@ -20,17 +20,19 @@ From the repo:
 mkdir -p /tmp/probe-share
 swiftc -swift-version 5 -O plans/network-midi/midiprobe.swift -o /tmp/midiprobe
 swiftc -swift-version 5 -O -target x86_64-apple-macos12.0 plans/network-midi/midiprobe.swift -o /tmp/probe-share/midiprobe
-python3 -m http.server 8765 --bind 10.1.10.121 --directory /tmp/probe-share
+python3 -m http.server 8765 --bind <stage-mac-ip> --directory /tmp/probe-share
 ```
 
-The second build is the Intel version for the audio MacBook.
+The second build is the Intel version for the audio MacBook. Replace
+`<stage-mac-ip>` with the stage Mac's Ethernet address (System Settings →
+Network → Ethernet).
 
 ### 0b. Copy the probe to the audio MacBook
 
 In Terminal:
 
 ```bash
-curl -o ~/Desktop/midiprobe http://10.1.10.121:8765/midiprobe && chmod +x ~/Desktop/midiprobe
+curl -o ~/Desktop/midiprobe http://<stage-mac-ip>:8765/midiprobe && chmod +x ~/Desktop/midiprobe
 ```
 
 `curl` copies it straight over the Ethernet cable and avoids the "unidentified
