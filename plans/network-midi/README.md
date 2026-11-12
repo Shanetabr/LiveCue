@@ -10,7 +10,7 @@ Setup's Live routing**, with no helper app running.
 | [2-fixes-and-fallbacks.md](2-fixes-and-fallbacks.md) | What to do once the tests show the cause, including fallbacks if Live routing can't work on that Mac |
 | [midiprobe.swift](midiprobe.swift) | Small command-line test tool used by the runbook |
 
-Earlier results are in [docs/NETWORK_MIDI_FINDINGS.md](../../docs/NETWORK_MIDI_FINDINGS.md).
+Earlier results are in [docs/dev-notes/NETWORK_MIDI_FINDINGS.md](../../docs/dev-notes/NETWORK_MIDI_FINDINGS.md).
 
 ## What we know
 
