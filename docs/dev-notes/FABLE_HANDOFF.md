@@ -20,7 +20,7 @@ House".
 | --- | --- |
 | **Shane** (GitHub `Shanetabr`) | Owner of this repo and the person you work with. Runs Claude Code on the stage Mac |
 | **Dan** (GitHub `danielshaji1`) | Wrote LiveCue v1.0 to v1.1. Collaborator with write access here |
-| **This repo** | [Shanetabr/LiveCue-alpha-V2](https://github.com/Shanetabr/LiveCue-alpha-V2), `main`. **Public.** All work goes here |
+| **This repo** | [Shanetabr/LiveCue](https://github.com/Shanetabr/LiveCue) (formerly LiveCue-alpha-V2), `main`. **Public.** All work goes here |
 | **Dan's original** | [danielshaji1/LiveCue-Talkback](https://github.com/danielshaji1/LiveCue-Talkback). Shane has no push access. Its v1.1.1 release has the WING Lamp Receiver helper zip |
 
 Releases: v1.2.0 (Nov 12) is the latest. It added the network MIDI endpoint
