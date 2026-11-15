@@ -59,6 +59,20 @@ The goal is to work with Audio MIDI Setup alone. On the audio MacBook:
 If Live routing can't be made to work, the working fallback is a small bridge
 that runs automatically on the audio MacBook, using the helper's approach.
 
+## Nov 15: stage Mac only
+
+Nobody was at the audio MacBook or the lamp. Tested from the stage Mac with
+[rtppeer.py](../../plans/network-midi/rtppeer.py) and
+[midithru.c](../../plans/network-midi/midithru.c):
+
+- The audio MacBook advertises one network MIDI session (port 5004).
+- The stage Mac sends each message as a complete `B5 10 xx`, stamped 0.2–0.5 ms before the send. It doesn't send future timestamps.
+- Apple's receiving driver (macOS 26) trusts the sender's timestamp: 500 ms in the past arrives at once, 1.5 s ahead is held 1.5 s.
+- A MIDI server thru route (network source → virtual destination) forwards on macOS 26 with no app running, and keeps the timestamps.
+
+Details and what they mean: [plans/network-midi/README.md](../../plans/network-midi/README.md).
+The runbook's audio MacBook tests are still untried.
+
 ## Not yet verified
 
 - Sending from LiveCue itself. These tests used `scripts/NetworkLampFlash.swift`.

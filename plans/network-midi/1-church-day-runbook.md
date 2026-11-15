@@ -20,10 +20,11 @@ From the repo:
 mkdir -p /tmp/probe-share
 swiftc -swift-version 5 -O plans/network-midi/midiprobe.swift -o /tmp/midiprobe
 swiftc -swift-version 5 -O -target x86_64-apple-macos12.0 plans/network-midi/midiprobe.swift -o /tmp/probe-share/midiprobe
+clang -O -target x86_64-apple-macos12.0 plans/network-midi/midithru.c -framework CoreMIDI -framework CoreFoundation -o /tmp/probe-share/midithru
 python3 -m http.server 8765 --bind <stage-mac-ip> --directory /tmp/probe-share
 ```
 
-The second build is the Intel version for the audio MacBook. Replace
+The second and third builds are the Intel versions for the audio MacBook. Replace
 `<stage-mac-ip>` with the stage Mac's Ethernet address (System Settings →
 Network → Ethernet).
 
@@ -33,6 +34,10 @@ In Terminal:
 
 ```bash
 curl -o ~/Desktop/midiprobe http://<stage-mac-ip>:8765/midiprobe && chmod +x ~/Desktop/midiprobe
+```
+
+```bash
+curl -o ~/Desktop/midithru http://<stage-mac-ip>:8765/midithru && chmod +x ~/Desktop/midithru
 ```
 
 `curl` copies it straight over the Ethernet cable and avoids the "unidentified
@@ -105,7 +110,43 @@ This is the key test. It takes the WING out of the picture.
 | --- | --- | --- |
 | 13 lines, arriving at the same time the stage Mac sent them | **Live routing works.** The problem is only the hop to WING Port 4 (cause #1) | Test 3 |
 | Lines arrive, but seconds later | **Cause #3.** Timestamps delay the messages | Fix T |
-| Nothing | **Live routing isn't forwarding** (cause #2, or Monterey) | Test 4, then repeat Test 2 after each reset |
+| Nothing | **Live routing isn't forwarding** (cause #2, or Monterey) | Test 2b, then Test 4, repeating Test 2 after each reset |
+
+## Test 2b: A MIDI server route instead of Live routing (5 min)
+
+Do this if Test 2 got nothing, before the resets in Test 4. It checks whether
+the MIDI server itself can forward when Live routing won't. Nothing keeps
+running afterwards: the route lives in macOS's MIDI server.
+
+1. Keep `midiprobe dest` running. Set both Live routing menus to blank.
+2. In a second Terminal window on the audio MacBook:
+
+   ```bash
+   ~/Desktop/midithru add "Network Session 1" "LiveCue Probe"
+   ```
+
+3. Stage Mac flashes.
+
+| What you see in the probe window | Meaning | Next |
+| --- | --- | --- |
+| 13 lines, on time | The MIDI server forwards fine; only Live routing is broken | Point the route at the WING (below) |
+| Lines arrive late | **Cause #3** | Fix T |
+| Nothing, or `add` says FAILED | Routes don't work on this Mac either | `~/Desktop/midithru remove`, then Test 4 |
+
+To point the route at the WING (network source first, WING second; `add`
+replaces the route to the probe):
+
+```bash
+~/Desktop/midithru add "Network Session 1" "WING Port 4"
+```
+
+Stage Mac flashes. If the lamp flashes, go to Fix P in
+[the fixes plan](2-fixes-and-fallbacks.md) and then "Lock it in". The route
+forwards **everything** from the network session to the WING, the same as Live
+routing would. To take it out again: `~/Desktop/midithru remove`.
+
+Never leave a route and a Live routing to the same port on at the same time, or
+every message arrives twice.
 
 ## Test 3: Live routing to the WING, with a freshly picked port (10 min)
 
@@ -194,8 +235,17 @@ If step 2 or 3 breaks it, note which. That tells us what needs redoing on startu
 | A3 `list`: WING devices / offline / sessions | |
 | 1 `listen`: lines? timestamps? | |
 | 2 Live routing → LiveCue Probe | |
+| 2b `midithru` route → LiveCue Probe / → WING Port 4 | |
 | 3 Live routing → WING Port 4 (fresh) | |
 | 3 MIDI Monitor spy (optional) | |
 | 4a / 4b / 4c / 4d / 4e | |
 | 5a / 5b | |
 | Lock it in: after restart / after WING power-cycle | |
+
+### Nov 15 attempt
+
+Shane had to leave before the audio MacBook steps, so the sheet above is still
+empty. The probe was never downloaded there. The stage Mac sent two 3 s flashes and one extra OFF
+(13 messages each, all accepted, ending OFF) with nobody watching the lamp and
+the audio MacBook's state unknown, so they prove nothing either way. The
+stage-Mac-only results are in [README.md](README.md).

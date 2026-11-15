@@ -34,6 +34,22 @@ Try these in order, re-running Test 1 after each:
 Audio MIDI Setup can't do the job on this MacBook. These are the realistic
 options, best first:
 
+### Fix P: MIDI server route (free, one command, nothing runs)
+
+Use this if Test 2b flashed the lamp. `midithru` asks macOS's own MIDI server to
+forward the network session to WING Port 4. It isn't a helper: no app, window or
+login item. The route is stored by the MIDI server, the same place Live routing
+lives.
+
+```bash
+~/Desktop/midithru add "Network Session 1" "WING Port 4"
+```
+
+- `midithru list` shows it; `midithru remove` deletes it.
+- Keep both Live routing menus blank, or messages arrive twice.
+- It forwards everything from the session, not only the lamp message.
+- **Unproven on Monterey.** It worked on the stage Mac (macOS 26). "Lock it in" must show that it survives a restart and a WING power-cycle. If it doesn't survive, use Fix B.
+
 ### Fix B: Invisible bridge, no window (free, can be done the same day)
 
 Turn the helper into a background service that starts at login and has no window
@@ -73,7 +89,8 @@ entirely. iConnectivity's mio range is one example.
 ```text
 Test 2 forwards? ── yes ─> Test 3 fixes WING Port 4? ── yes ─> Fix S, lock it in
                 │                                    └─ no ──> MIDI Monitor spy, Fix T if delayed
-                └─ no ──> Test 4 resets ── one works ─> Fix R, lock it in
-                                        └─ none ──> Test 5a ── stage Mac works ─> Monterey: Fix B now, C or D later
-                                                            └─ also fails ────> session/network setup, tell Claude
+                └─ no ──> Test 2b route flashes the lamp? ── yes ─> Fix P, lock it in
+                                        └─ no ──> Test 4 resets ── one works ─> Fix R, lock it in
+                                                                └─ none ──> Test 5a ── stage Mac works ─> Monterey: Fix B now, C or D later
+                                                                                    └─ also fails ────> session/network setup, tell Claude
 ```

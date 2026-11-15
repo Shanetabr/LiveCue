@@ -9,6 +9,8 @@ Setup's Live routing**, with no helper app running.
 | [1-church-day-runbook.md](1-church-day-runbook.md) | Step-by-step tests for the next visit, in order, with what each result means |
 | [2-fixes-and-fallbacks.md](2-fixes-and-fallbacks.md) | What to do once the tests show the cause, including fallbacks if Live routing can't work on that Mac |
 | [midiprobe.swift](midiprobe.swift) | Small command-line test tool used by the runbook |
+| [midithru.c](midithru.c) | Creates a route inside the system MIDI server, with no app running (runbook Test 2b, Fix P) |
+| [rtppeer.py](rtppeer.py) | A stand-in network MIDI participant for testing one Mac on its own. Used for the Nov 15 results below |
 
 Earlier results are in [docs/dev-notes/NETWORK_MIDI_FINDINGS.md](../../docs/dev-notes/NETWORK_MIDI_FINDINGS.md).
 
@@ -46,6 +48,18 @@ There are two more causes, both less likely:
 
 Already ruled out: the WING settings, the cable, the lamp mapping, the network
 and the message bytes. The helper's test path covered all of these.
+
+## Nov 15: what the stage Mac showed on its own
+
+Nobody was at the audio MacBook, so none of this says anything about that Mac
+or the lamp. It narrows the causes from the stage Mac's side.
+
+| Check | Result | What it means |
+| --- | --- | --- |
+| Sessions advertised on the network | The audio MacBook advertises **one** session, on port 5004 | "Wrong session" is less likely |
+| What the stage Mac puts on the wire (`rtppeer.py capture`) | Every packet is a complete `B5 10 xx`, stamped 0.2–0.5 ms **before** the send time | The stage Mac doesn't send future timestamps or shortened (running status) messages. If cause #3 is real, it comes from the clock sync between the two Macs, not from the sender |
+| How Apple's receiving side treats timestamps (`rtppeer.py send`, stage Mac as receiver) | A packet stamped 500 ms in the past arrives at once. One stamped 1.5 s ahead is held for 1.5 s | The network driver trusts the sender's timestamp, so cause #3 is possible. Tested on macOS 26 only |
+| A MIDI server route instead of Live routing (`midithru`, network source → LiveCue Probe) | Forwards, with nothing running. It keeps the same timestamps | A second way to route without a helper app. It won't fix cause #3, but it sidesteps causes #1 and #2. Tested on macOS 26 only |
 
 ## Note on the stage Mac
 
