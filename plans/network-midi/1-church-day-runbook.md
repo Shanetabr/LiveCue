@@ -244,8 +244,17 @@ If step 2 or 3 breaks it, note which. That tells us what needs redoing on startu
 
 ### Nov 15 attempt
 
-Shane had to leave before the audio MacBook steps, so the sheet above is still
-empty. The probe was never downloaded there. The stage Mac sent two 3 s flashes and one extra OFF
-(13 messages each, all accepted, ending OFF) with nobody watching the lamp and
-the audio MacBook's state unknown, so they prove nothing either way. The
-stage-Mac-only results are in [README.md](README.md).
+Shane was at the lamp for about 10 minutes but not set up at the audio MacBook,
+so the sheet above is still mostly empty. Neither tool was downloaded there.
+
+| What was tried | Lamp |
+| --- | --- |
+| Stage Mac flash loop through the normal session | No flash |
+| `rtppeer.py` straight to the audio MacBook's session, every message stamped 300 ms in the past (86 sent, receipt acknowledged) | No flash |
+
+Shane then reported that Live routing on the audio MacBook is set to WING
+Port 4. Not confirmed: whether that is the bottom menu, and whether the helper
+was open. If it was the bottom menu, past timestamps don't get through either,
+so **cause #3 is unlikely** and Live routing isn't forwarding (cause #1 or #2).
+Next visit: start at A3, then Test 2 and Test 2b. Reset 4a was suggested but
+not tried. The stage-Mac-only results are in [README.md](README.md).
