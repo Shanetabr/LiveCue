@@ -155,6 +155,8 @@ LiveCue is a working prototype that has been tested on real show hardware.
   console lamp through a small CoreMIDI bridge
   ([findings](docs/dev-notes/NETWORK_MIDI_FINDINGS.md)).
 - Direct USB to the WING from the stage Mac.
+- The no-window WING Lamp Bridge on the console-side Mac: a network flash
+  from the stage Mac lit the lamp (Nov 21).
 
 **Not yet verified end to end**
 - The spoken rule → network → console path in a single live run.

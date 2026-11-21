@@ -73,6 +73,19 @@ Nobody was at the audio MacBook or the lamp. Tested from the stage Mac with
 Details and what they mean: [plans/network-midi/README.md](../../plans/network-midi/README.md).
 The runbook's audio MacBook tests are still untried.
 
+## Nov 21: network flash works
+
+From the stage Mac, `midiprobe flash "Network RTP Session 1"` sent one 3 s flash
+(12 ON/OFF at 250 ms, then OFF, all accepted). **Shane saw the lamp flash.**
+On the audio MacBook, the new [WING Lamp Bridge](../../tools/WINGLampBridge/README.md)
+was forwarding (installed from the `wing-lamp-bridge-v1.0.0` release).
+
+This confirms the bridge on real hardware: stage Mac → network → bridge →
+WING Port 4 → lamp. Still to check: it comes back by itself after a restart
+of the audio MacBook (needs automatic login), sending from LiveCue's own
+FLASH 3 SECONDS button, and the spoken "Front of House" rule. Live routing
+alone still hasn't worked on that Mac.
+
 ## Not yet verified
 
 - Sending from LiveCue itself. These tests used `scripts/NetworkLampFlash.swift`.
@@ -94,4 +107,4 @@ touch /tmp/lamp.stop                                     # stop the loop, sends 
 ```
 
 That bridge now exists: [tools/WINGLampBridge](../../tools/WINGLampBridge/README.md)
-(headless, starts at login, lamp-only). Not yet tried on the audio MacBook.
+(headless, starts at login, lamp-only). Flashed the lamp on Nov 21 (see above).
