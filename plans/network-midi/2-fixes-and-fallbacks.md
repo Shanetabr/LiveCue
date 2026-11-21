@@ -62,6 +62,10 @@ there's nothing to run or click on a Sunday. It would:
 
 Effort: about an hour. Lowest cost, and uses the part that's already proven.
 
+**Done Nov 21:** [tools/WINGLampBridge](../../tools/WINGLampBridge/README.md),
+installed on the audio MacBook, flashed the lamp from the stage Mac. Left to
+check: it survives a restart (automatic login) and a WING power-cycle.
+
 ### Fix C: Newer Mac at the WING
 
 A Mac whose Live routing works in Test 5 (for example any Apple Silicon Mac) does

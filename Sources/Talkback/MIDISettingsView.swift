@@ -99,7 +99,7 @@ struct MIDISettingsView: View {
                         }
                         Toggle("Bridge incoming Network MIDI to selected WING USB output", isOn: Bindable(model.midiEngine).bridgeNetworkToUSB)
                             .disabled(!model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }))
-                        Text("On the audio Mac, use either this bridge or Audio MIDI Setup’s bottom Live routing to WING Port 4. Leave both Live routings blank when this bridge is on.")
+                        Text("Use this bridge only when LiveCue runs on the Mac plugged into the WING. For a separate audio Mac (macOS 11+), install WING Lamp Bridge from the LiveCue releases page instead. Leave both Audio MIDI Setup Live routings blank while any bridge is on.")
                             .font(.caption)
                         Text("Network received: \(model.midiEngine.receivedNetworkMessages) • Forwarded to USB: \(model.midiEngine.forwardedMessages)")
                         Text("Last received: \(model.midiEngine.lastReceivedMIDI)").font(.system(.caption, design: .monospaced))

@@ -4,6 +4,24 @@ This picks up from a Claude Opus 5.5 session that ran from Oct 31 to Nov 15,
 2026. It covers everything that session did and decided. Read it first, then
 the files listed in "Read next".
 
+> **Nov 21 update: the network lamp works.** At Shane's request, a session
+> built **Fix B**: [WING Lamp Bridge](../../tools/WINGLampBridge/README.md),
+> a no-window LaunchAgent version of the helper. It forwards only ch 6 CC 16,
+> reconnects when ports come back, and sends OFF on exit. It's released
+> separately as
+> [`wing-lamp-bridge-v1.0.0`](https://github.com/Shanetabr/LiveCue/releases/tag/wing-lamp-bridge-v1.0.0),
+> and LiveCue v1.2.0 stays Latest. Shane installed it on the audio MacBook. A
+> `midiprobe flash` from the stage Mac **flashed the lamp** (Shane watched it),
+> then ended OFF. Details: [NETWORK_MIDI_FINDINGS.md](NETWORK_MIDI_FINDINGS.md).
+>
+> Still open, in this order:
+> 1. The bridge comes back by itself after the audio MacBook restarts (needs automatic login).
+> 2. LiveCue's own FLASH 3 SECONDS button, then the rule's Test button, then the spoken rule (see "The verify plan" below).
+> 3. The app issues below, which waited on the lamp.
+>
+> Ground rule 2 still stands: the runbook's Live-routing-only tests are now
+> optional, for whenever Shane wants to try dropping the bridge.
+
 ## The project in one paragraph
 
 LiveCue is a macOS 26+ SwiftUI app. Swift 6, built with SwiftPM and
@@ -159,6 +177,7 @@ flag, so Gatekeeper won't block it. Exact commands are in the runbook.
 
 - [scripts/NetworkLampFlash.swift](../../scripts/NetworkLampFlash.swift): the earlier flash script, `NetworkLampFlash "<dest>" [--loop <stop file>]`. `midiprobe flash` replaces it.
 - [tools/WINGLampReceiver](../../tools/WINGLampReceiver/): Dan's Objective-C helper (macOS 11+, universal). It forwards only ch 6 CC 16 from the network to USB, sends with timestamp 0, and parses running status. It's the proven bridge and the basis for Fix B.
+- [tools/WINGLampBridge](../../tools/WINGLampBridge/README.md): Fix B, built Nov 21. Plain C, no window, starts at login. Install it from its release zip, then use `wing-lamp-bridge --list` and `--flash` on the audio MacBook for diagnosis. The log is `~/Library/Logs/WINGLampBridge.log`.
 - [MIDI Monitor](https://www.snoize.com/midimonitor/): free, works on Monterey. Runbook step 3 uses its "Spy on output to destinations" to see whether Live routing reaches WING Port 4.
 
 ## LiveCue app: known issues (not started, they wait on the lamp)
@@ -215,6 +234,7 @@ The verify plan:
 | Nov 2 | V2 repo created; findings, test script, plans and midiprobe pushed. Dan invited, and has since accepted |
 | Nov 12 | A separate session (PR #1): README and LICENSE, notes moved to `docs/dev-notes/`, the Dante fix, LAN addresses removed, v1.2.0 released. The repo is now public |
 | Nov 15 | This handoff. Nothing has been tested on the hardware since early November; the runbook is still untried |
+| Nov 21 | WING Lamp Bridge (Fix B) built, released separately and installed on the audio MacBook. A network flash from the stage Mac lit the lamp |
 
 ## Read next
 

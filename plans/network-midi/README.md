@@ -4,6 +4,11 @@ These plans are separate from the LiveCue code. The goal: the stage Mac
 flashes the WING lamp through the audio MacBook using **only Audio MIDI
 Setup's Live routing**, with no helper app running.
 
+> **Nov 21:** the lamp now flashes from the stage Mac through
+> [WING Lamp Bridge](../../tools/WINGLampBridge/README.md) (Fix B) on the audio
+> MacBook. That's the working setup. The tests below are only needed to try
+> dropping the bridge for Live routing alone.
+
 | File | What it's for |
 | --- | --- |
 | [1-church-day-runbook.md](1-church-day-runbook.md) | Step-by-step tests for the next visit, in order, with what each result means |

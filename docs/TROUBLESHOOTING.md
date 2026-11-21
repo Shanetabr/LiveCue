@@ -13,8 +13,17 @@ to OTHER → LAMP BRIGHTNESS in the supplied console photos.
 
 Connect this app's Network MIDI destination to the receiving Mac's enabled
 Network MIDI session. On that Mac, bridge the network session input to the
-WING USB **remote-control** MIDI destination (not its DAW control port).
+WING USB **remote-control** MIDI destination (WING Port 4, not its DAW control port).
 Enable **Custom Controls (RX Only) → USB** in WING Setup → MIDI.
+
+**Recommended receiving-Mac bridge:** install
+[WING Lamp Bridge](../tools/WINGLampBridge/README.md)
+([download](https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.0.0/WINGLampBridge.zip)).
+It runs in the background with no window, starts at login, and forwards only
+the lamp control to WING Port 4. It doesn't need LiveCue on that Mac, and it
+works on macOS 11 and later. Set **both** Audio MIDI Setup Live routings to
+blank while it runs. On Nov 21 it flashed the lamp from the stage Mac. Audio
+MIDI Setup's Live routing on its own didn't, on a 2016 MacBook running Monterey.
 Keep Layer 2 encoder 1 assigned to Lamp Brightness. First use the rule's
 **Test** button, then start transcription and say “Front of House”.
 The app sends through the selected network destinations; select only the
@@ -27,8 +36,10 @@ LiveCue preserves participants connected in Audio MIDI Setup and imports them
 into its Network MIDI list. Explicitly switching a destination off still
 removes that participant. The session broadcasts to its connected participants.
 The accepted-message counter confirms a successful local CoreMIDI send, not
-receipt by the other Mac or the WING. On the USB bridge Mac, route incoming
-network MIDI (bottom Live routings selector) to WING Port 4 / MIDI Control.
+receipt by the other Mac or the WING. On the USB bridge Mac, run WING Lamp
+Bridge (above). Routing incoming network MIDI with the bottom Live routing
+selector to WING Port 4 is the no-helper alternative, but it didn't reach
+the WING on Monterey.
 
 With recording running, the transcript tab reports the opened audio format and
 whether the selected device is delivering callbacks, silent buffers, or signal
