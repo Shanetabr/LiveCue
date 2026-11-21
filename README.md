@@ -164,12 +164,12 @@ LiveCue is a working prototype that has been tested on real show hardware.
 - Direct USB to the WING from the stage Mac.
 - The no-window WING Lamp Bridge on the console-side Mac: a network flash
   from the stage Mac lit the lamp (Nov 21).
+- **The full spoken path:** saying "Front of House" on talkback (Dante input
+  1) fired the rule and flashed the WING lamp through the bridge (Nov 21).
+  Test Connection passed every step on the same setup.
+- Dante Virtual Soundcard capture with 16 inputs (48 kHz, signal on input 1).
 
 **Not yet verified end to end**
-- The spoken rule → network → console path in a single live run.
-- Test Connection's bridge check over the real network. It needs WING Lamp
-  Bridge 1.1 on the audio Mac and has only been tested with virtual MIDI ports.
-- Dante Virtual Soundcard capture with more than two inputs.
 - macOS's own Audio MIDI Setup "Live routing" didn't forward to the WING on
   a 2016 MacBook running Monterey. The bridge works around it.
 

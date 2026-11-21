@@ -86,13 +86,49 @@ of the audio MacBook (needs automatic login), sending from LiveCue's own
 FLASH 3 SECONDS button, and the spoken "Front of House" rule. Live routing
 alone still hasn't worked on that Mac.
 
+## Nov 21, later: LiveCue 1.3.0 Test Connection, all green
+
+Bridge 1.1 is installed on the audio MacBook (from `wing-lamp-bridge-v1.1.0`).
+LiveCue 1.3.0's Test Connection on the stage Mac passed every step:
+
+| Step | Result |
+| --- | --- |
+| Network MIDI on this Mac | Sending on Network RTP Session 1 |
+| Audio MacBook on the network | Seen over Bonjour |
+| Lamp bridge | WING Lamp Bridge 1.1 answered in 17 ms (7 ms on the status heartbeat) |
+| WING | The bridge sees WING Port 4 |
+| Lamp | LiveCue's own 3 s flash; **Shane saw it flash** |
+
+So sending from LiveCue itself is now verified, along with the bridge's ping
+answer over the real network. Before 1.1 was actually installed (files
+copied but the installer not run), no reply reached the stage Mac. Copying
+the files isn't enough; run Install WING Lamp Bridge.command.
+
+## Nov 21, later: spoken rule works end to end
+
+LiveCue 1.3.0 listened on Dante Virtual Soundcard input 1 (talkback), with the
+WING FOH PRESET rule ("Front of House", contains, 3.2 s cooldown). Shane said it
+on talkback:
+
+| Heard | Result |
+| --- | --- |
+| "Friend of house." | No fire: the speech engine misheard |
+| "Check, check." | No fire (correct) |
+| "Front of house." | Rule fired, 3 s flash, **Shane saw the lamp flash** |
+
+So the full path is verified on hardware: talkback → Dante → LiveCue speech →
+rule → network → WING Lamp Bridge 1.1 → WING Port 4 → lamp. LiveCue reported
+"48000 Hz / 16 inputs: signal on input 1", so the multi-input Dante capture fix
+(`c6d211e`) also works on real hardware. Watch for
+misrecognition ("Friend of house"). If it's common, rules could take alternate
+phrasings.
+
+Still to check: the bridge comes back after the audio MacBook restarts
+(automatic login).
+
 ## Not yet verified
 
-- Sending from LiveCue itself. These tests used `scripts/NetworkLampFlash.swift`.
-- The spoken "Front of House" rule.
-- Dante input. `AVAudioFormat(commonFormat:sampleRate:channels:interleaved:)`
-  returns nil above 2 channels, so `AudioCapture.startMulti` probably fails on
-  Dante or any device with more than 2 inputs.
+- The bridge restarting by itself after the audio MacBook reboots.
 
 ## Test script
 
