@@ -140,6 +140,11 @@ three seconds. Console and receiving-Mac setup is in
 [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) and
 [`tools/WINGLampReceiver`](tools/WINGLampReceiver/README.md).
 
+**WING Lamp Bridge** (separate install, for the Mac plugged into the WING):
+a background version of that helper with no window. It starts at login and
+forwards only the lamp control. It doesn't need LiveCue on that Mac. See
+[`tools/WINGLampBridge`](tools/WINGLampBridge/README.md).
+
 ## Status
 
 LiveCue is a working prototype that has been tested on real show hardware.
@@ -171,6 +176,7 @@ Sources/Talkback/      the app (target: LiveCue)
 Tests/                 memory and long-session checks
 scripts/               test runners and hardware diagnostics
 tools/WINGLampReceiver standalone macOS 11+ bridge for the console-side Mac
+tools/WINGLampBridge   the same bridge with no window, starts at login (separate install)
 docs/                  troubleshooting, MIDI/MSC protocol reference, ProdCom feature analysis
 docs/dev-notes/        handoff and findings notes from development
 plans/                 runbooks for upcoming hardware tests

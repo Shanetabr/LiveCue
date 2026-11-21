@@ -92,3 +92,6 @@ swiftc scripts/NetworkLampFlash.swift -o /tmp/lamp
 /tmp/lamp "Network RTP Session 1" --loop /tmp/lamp.stop  # 500 ms until the file exists
 touch /tmp/lamp.stop                                     # stop the loop, sends OFF
 ```
+
+That bridge now exists: [tools/WINGLampBridge](../../tools/WINGLampBridge/README.md)
+(headless, starts at login, lamp-only). Not yet tried on the audio MacBook.
