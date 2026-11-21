@@ -19,6 +19,29 @@ the files listed in "Read next".
 > 2. LiveCue's own FLASH 3 SECONDS button, then the rule's Test button, then the spoken rule (see "The verify plan" below).
 > 3. The app issues below, which waited on the lamp.
 >
+> **Nov 21, later: LiveCue 1.3.0 (local only, not pushed or released yet).** Shane
+> asked for the app to be fully updated with a troubleshoot button and a status
+> window. Added:
+> - **Connection menu, and TEST / STATUS buttons in the top bar.** Test Connection
+>   ([ConnectionTest.swift](../../Sources/Talkback/ConnectionTest.swift)) checks
+>   each hop in turn: session, audio Mac seen over Bonjour, bridge ping, WING seen by
+>   the bridge, then a 3 s flash that Shane confirms by eye. The Status window is
+>   [StatusView.swift](../../Sources/Talkback/StatusView.swift).
+> - **Bridge 1.1** answers a ping SysEx `F0 7D 4C 43 01 nn F7` with
+>   `F0 7D 4C 43 02 nn wing major minor F7` on the network side. It never forwards
+>   it to the WING. LiveCue pings every 10 s and shows BRIDGE ONLINE.
+>   The installer zip is bundled in LiveCue.app (Connection → Get Bridge Installer).
+>   The audio MacBook still runs 1.0, so the app reports "not answering" until 1.1
+>   is installed there.
+> - All the app issues in the table below are fixed except Dante hardware testing.
+> - `build.sh` signs in a temporary folder, because the iCloud Desktop adds file
+>   attributes that broke codesign.
+>
+> Tests: `scripts/LogicTest.swift` (matching and ping format), the ping/reply case
+> in `scripts/NetworkMIDITest.swift`, the ping case in `tools/WINGLampBridge/test.sh`,
+> plus the memory checks. All pass. Not yet done: bridge 1.1 on the audio MacBook,
+> and the spoken rule live.
+>
 > Ground rule 2 still stands: the runbook's Live-routing-only tests are now
 > optional, for whenever Shane wants to try dropping the bridge.
 
@@ -188,14 +211,14 @@ From the previous session's full review. Each one was re-checked against
 | Issue | Where | Status |
 | --- | --- | --- |
 | `AVAudioFormat(commonFormat:sampleRate:channels:interleaved:)` returns nil above 2 channels, so START failed on Dante and other multi-input devices | [AudioCapture.swift](../../Sources/Talkback/AudioCapture.swift) | **Fixed** in `c6d211e` with a discrete channel layout. Typechecks clean in Swift 6 mode; **not yet run with real Dante hardware** |
-| MSC "FIRE (0x0B)" option actually sends MSC GO_OFF (0x0B); FIRE is 0x07 | [KeywordRulesView.swift:410](../../Sources/Talkback/KeywordRulesView.swift:410) | Open |
-| Substring matching has no word boundaries ("cue 1" fires on "cue 10") | [KeywordMatcher.swift:54](../../Sources/Talkback/KeywordMatcher.swift:54) | Open |
-| The banner says "Fired" even when the MIDI send failed | [Model.swift:519](../../Sources/Talkback/Model.swift:519) | Open. Reuse `midiEngine.lastError` |
-| `finish()` cancels the reading task before finalizing, so the last result is dropped | [Transcriber.swift:116](../../Sources/Talkback/Transcriber.swift:116) | Open. Finalize first, then await |
-| The channel clamp overwrites saved channel inputs when a smaller device is selected | [Model.swift:230](../../Sources/Talkback/Model.swift:230) | Open |
-| The audio device isn't saved between launches | Model.swift (only recent documents use UserDefaults) | Open |
-| Auto-reconnect matches by name, so it can pick the wrong device when two have the same name | [Model.swift:160](../../Sources/Talkback/Model.swift:160) | Open |
-| No unsaved-changes prompt on quit or close | Model / app | Open |
+| MSC "FIRE (0x0B)" option actually sends MSC GO_OFF (0x0B); FIRE is 0x07 | [KeywordRulesView.swift:410](../../Sources/Talkback/KeywordRulesView.swift:410) | **Fixed** 1.3.0: GO OFF (0x0B) and FIRE MACRO (0x07, one macro byte) are separate options |
+| Substring matching has no word boundaries ("cue 1" fires on "cue 10") | [KeywordMatcher.swift](../../Sources/Talkback/KeywordMatcher.swift) | **Fixed** 1.3.0: whole-word matching that ignores punctuation |
+| The banner says "Fired" even when the MIDI send failed | Model.swift `executeTrigger` | **Fixed** 1.3.0: sends return Bool, red "nothing was sent" banner |
+| `finish()` cancels the reading task before finalizing, so the last result is dropped | [Transcriber.swift](../../Sources/Talkback/Transcriber.swift) | **Fixed** 1.3.0: finalizes first, with a 3 s watchdog |
+| The channel clamp overwrites saved channel inputs when a smaller device is selected | Model.swift | **Fixed** 1.3.0: settings are kept; missing inputs are skipped at START with a message |
+| The audio device isn't saved between launches | Model.swift | **Fixed** 1.3.0: saved by device UID |
+| Auto-reconnect matches by name, so it can pick the wrong device when two have the same name | Model.swift | **Fixed** 1.3.0: matches by UID |
+| No unsaved-changes prompt on quit or close | Model / AppDelegate | **Fixed** 1.3.0: Save / Don't Save / Cancel on quit, new and open |
 | No LICENSE; stale docs | | **Fixed** Nov 12 (LICENSE added, README reworked, notes moved to `docs/dev-notes/`) |
 
 Not yet verified end to end:

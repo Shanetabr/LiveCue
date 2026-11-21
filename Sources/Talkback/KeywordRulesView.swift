@@ -407,16 +407,17 @@ struct RuleEditSheet: View {
                             Text("GO (0x01)").tag(1)
                             Text("STOP (0x02)").tag(2)
                             Text("RESUME (0x03)").tag(3)
-                            Text("FIRE (0x0B)").tag(11)
+                            Text("FIRE MACRO (0x07)").tag(7)
+                            Text("GO OFF (0x0B)").tag(11)
                         }
-                        TextField("Cue Number (optional, e.g. '1', '10.5')", text: $mscCueNumber)
+                        TextField(mscCommand == 7 ? "Macro number (0-127)" : "Cue Number (optional, e.g. '1', '10.5')", text: $mscCueNumber)
                         TextField("Cue List (optional)", text: $mscCueList)
 
                     case .wingLamp:
                         Text("Layer 2, encoder 1 must be assigned to Lamp Brightness. Enable Custom Controls USB on WING. Sends channel 6, CC 16: 127/0 every 250 ms for 3 seconds, then off.")
                             .font(.caption)
                     case .flash:
-                        Text("Flashes a high-visibility alert border across the Talkback window.")
+                        Text("Flashes a high-visibility alert border across the LiveCue window.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

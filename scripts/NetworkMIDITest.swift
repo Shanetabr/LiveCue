@@ -38,6 +38,7 @@ struct NetworkMIDITest {
         precondition(MIDIObjectGetIntegerProperty(source, kMIDIPropertyUniqueID, &inputID) == noErr)
 
         let engine = MIDIEngine()
+        engine.heartbeatEnabled = false  // keep bridge pings out of the captured bytes
         print("Available network outputs: \(engine.networkOutputs.map(\.name))")
         print("Available network inputs: \(engine.networkInputs.map(\.name))")
         precondition(engine.networkOutputs.contains { $0.id == outputID && $0.endpoint == destination })
@@ -63,6 +64,24 @@ struct NetworkMIDITest {
         precondition(engine.receivedNetworkMessages == 1)
         precondition(engine.lastReceivedMIDI == "B5 10 7F")
         precondition(engine.forwardedMessages == 0)
+
+        // Connection test: a ping goes out on the selected output, and the bridge's
+        // reply on the selected input resolves it with the WING flag and version.
+        let before = capture.bytes.count
+        let pending = Task { @MainActor in await engine.pingBridge(timeout: .seconds(2)) }
+        try await Task.sleep(for: .milliseconds(150))
+        let ping = Array(capture.bytes.dropFirst(before))
+        precondition(ping.count == 7 && ping[0] == 0xF0 && ping[1] == 0x7D && ping[4] == 0x01, "ping bytes: \(ping)")
+        var replyList = MIDIPacketList()
+        let replyBytes: [UInt8] = [0xF0, 0x7D, 0x4C, 0x43, 0x02, ping[5], 0x01, 0x01, 0x01, 0xF7]
+        precondition(MIDIPacketListAdd(&replyList, MemoryLayout<MIDIPacketList>.size, MIDIPacketListInit(&replyList), 0, replyBytes.count, replyBytes) != nil)
+        precondition(MIDIReceived(source, &replyList) == noErr)
+        let reply = await pending.value
+        precondition(reply?.wingFound == true && reply?.version == "1.1", "reply: \(String(describing: reply))")
+        precondition(engine.receivedNetworkMessages == 1, "replies are not counted as received cues")
+        let silent = await engine.pingBridge(timeout: .milliseconds(300))
+        precondition(silent == nil, "no reply means nil")
+        print("PASS: bridge ping out, reply in, no reply times out")
 
         // A rename must preserve the unique-ID selection and input subscription.
         precondition(MIDIObjectSetStringProperty(destination, kMIDIPropertyName, "Network Renamed virtual test output" as CFString) == noErr)

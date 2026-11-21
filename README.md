@@ -31,15 +31,22 @@ show.
   chat-style, with colored speaker badges and a level meter per channel.
 - **Keyword rules → show control.** Contains, exact or prefix matching, an
   optional per-channel scope, and a per-rule cooldown so recognition jitter
-  can't double-fire a cue. Actions:
+  can't double-fire a cue. Matching is whole-word ("cue 1" never fires on
+  "cue 10") and ignores punctuation the speech engine adds. Actions:
   - MIDI Note On/Off, Control Change, Program Change
-  - **MIDI Show Control** (RP-002 SysEx: GO / STOP / RESUME / FIRE with cue and list)
+  - **MIDI Show Control** (RP-002 SysEx: GO / STOP / RESUME / GO OFF with cue and list, FIRE with a macro number)
   - a visual alert that flashes the screen border
 - **Network MIDI (RTP-MIDI)** through real CoreMIDI network endpoints, plus
   Bonjour discovery of `_apple-midi._udp` hosts, direct USB output, and an
   optional network-to-USB bridge.
 - **Pro audio inputs**: any CoreAudio device, including Dante Virtual
   Soundcard, AVB and USB interfaces, with per-input channel mapping.
+- **Test Connection and a Status window** (Connection menu, or TEST and
+  STATUS in the top bar). Test Connection checks each hop to the console:
+  this Mac's network session, the audio Mac on the network, the WING Lamp
+  Bridge, the WING, and finally the lamp. It explains each problem in plain
+  words. The Status window shows what's working right now. LiveCue checks
+  the bridge every 10 seconds, and the status bar shows BRIDGE ONLINE.
 - **Show files**: `.livecue` session documents with Save / Save As / Open
   Recent, holding transcript, channels, rules and the trigger log.
 - **Export** the transcript as TXT, CSV or SRT subtitles.
@@ -160,6 +167,8 @@ LiveCue is a working prototype that has been tested on real show hardware.
 
 **Not yet verified end to end**
 - The spoken rule → network → console path in a single live run.
+- Test Connection's bridge check over the real network. It needs WING Lamp
+  Bridge 1.1 on the audio Mac and has only been tested with virtual MIDI ports.
 - Dante Virtual Soundcard capture with more than two inputs.
 - macOS's own Audio MIDI Setup "Live routing" didn't forward to the WING on
   a 2016 MacBook running Monterey. The bridge works around it.

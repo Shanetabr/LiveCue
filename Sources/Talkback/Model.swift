@@ -47,11 +47,15 @@ final class Model {
     var channelStates: [ChannelState] = []
 
     // MIDI & Keyword Triggering
-    var midiEngine = MIDIEngine()
+    var midiEngine: MIDIEngine
     var keywordMatcher = KeywordMatcher()
     var triggerLogs: [TriggerLogItem] = []
     var lastTriggerBanner: String? = nil
+    var lastTriggerFailed = false
     var flashTrigger = false
+
+    /// Plain-language connection checks (stage Mac → network → bridge → WING).
+    @ObservationIgnored let connectionTest: ConnectionTest
 
     // Document & Session State (Save / Save As / Open / Recent)
     var currentDocumentURL: URL? = nil
@@ -73,6 +77,9 @@ final class Model {
     private var wasRunningBeforeDisconnect = false
     @ObservationIgnored
     private var disconnectedDeviceName: String?
+    @ObservationIgnored
+    private var disconnectedDeviceUID: String?
+    private static let savedDeviceKey = "LiveCueAudioDeviceUID"
 
     var device: InputDevice? { devices.first { $0.id == deviceID } }
     var maxChannelsLimit: Int { AppConfig.maxChannelsLimit }
@@ -90,6 +97,9 @@ final class Model {
     var isMicrophoneDenied: Bool = false
 
     init() {
+        let engine = MIDIEngine()
+        midiEngine = engine
+        connectionTest = ConnectionTest(midi: engine)
         refreshDevices()
         loadConfig()
         loadRecentDocuments()
@@ -149,18 +159,22 @@ final class Model {
             if running {
                 wasRunningBeforeDisconnect = true
                 disconnectedDeviceName = previousDevice?.name ?? "Audio Device"
+                disconnectedDeviceUID = previousDevice?.uid
                 status = "Audio interface '\(disconnectedDeviceName!)' disconnected. Waiting for reconnect…"
                 capture.stop()
                 stopMeterTimer()
                 running = false
             }
         } else if wasRunningBeforeDisconnect {
-            // Previously disconnected device has re-appeared!
+            // Previously disconnected device has re-appeared. Match the exact device
+            // (UID); fall back to the name only for devices without a UID.
+            let uid = disconnectedDeviceUID ?? ""
             if let discName = disconnectedDeviceName,
-               let reconnected = devices.first(where: { $0.name == discName || $0.id == previousID }) {
+               let reconnected = devices.first(where: { uid.isEmpty ? $0.name == discName : $0.uid == uid }) {
                 deviceID = reconnected.id
                 wasRunningBeforeDisconnect = false
                 disconnectedDeviceName = nil
+                disconnectedDeviceUID = nil
                 status = "Interface '\(reconnected.name)' reconnected. Resuming capture…"
                 Task {
                     await start()
@@ -224,27 +238,23 @@ final class Model {
     func refreshDevices() {
         devices = AudioDevices.inputs()
         if device == nil {
+            // Prefer the device chosen last time, then the system default input.
+            let savedUID = UserDefaults.standard.string(forKey: Self.savedDeviceKey) ?? ""
             let preferred = AudioDevices.defaultInput()
-            deviceID = devices.first { $0.id == preferred }?.id ?? devices.first?.id ?? 0
+            deviceID = devices.first { !savedUID.isEmpty && $0.uid == savedUID }?.id
+                ?? devices.first { $0.id == preferred }?.id ?? devices.first?.id ?? 0
         }
         channel = min(channel, max(0, (device?.channels ?? 1) - 1))
-        validateChannelsForCurrentDevice()
     }
 
-    func validateChannelsForCurrentDevice() {
-        guard let dev = device else { return }
-        let maxIn = max(1, dev.inputChannels)
-        var changed = false
-        for i in 0..<channels.count {
-            if channels[i].channelIndex >= maxIn {
-                channels[i].channelIndex = maxIn - 1
-                changed = true
-            }
-        }
-        if changed {
-            syncChannelStates()
-            saveConfig()
-        }
+    /// Kept for callers; channel settings are no longer rewritten when a device has
+    /// fewer inputs. Out-of-range channels are skipped at START instead.
+    func validateChannelsForCurrentDevice() {}
+
+    /// Enabled channels whose input number doesn't exist on the selected device.
+    var channelsMissingOnDevice: [ChannelConfig] {
+        guard let dev = device else { return [] }
+        return channels.filter { $0.isEnabled && $0.channelIndex >= dev.inputChannels }
     }
 
     // MARK: - Metering Timer
@@ -335,7 +345,13 @@ final class Model {
         status = "Initializing speech engines…"
 
         // Filter enabled channels and enforce maximum of 6 channels limit
-        var targetConfigs = Array(channels.filter { $0.isEnabled }.prefix(AppConfig.maxChannelsLimit))
+        let enabled = Array(channels.filter { $0.isEnabled }.prefix(AppConfig.maxChannelsLimit))
+        var targetConfigs = enabled.filter { $0.channelIndex < device.inputChannels }
+        let skipped = enabled.filter { $0.channelIndex >= device.inputChannels }
+        if targetConfigs.isEmpty && !skipped.isEmpty {
+            status = "\(device.name) has \(device.inputChannels) input(s). Your channels use input \(skipped.map { String($0.channelIndex + 1) }.joined(separator: ", ")). Change them in Channels or pick another device."
+            return
+        }
         if targetConfigs.isEmpty {
             let fallback = ChannelConfig(id: UUID(), name: "Input \(channel + 1)", colorHex: "#00E575", channelIndex: channel, isEnabled: true)
             channels = [fallback]
@@ -379,6 +395,9 @@ final class Model {
             try capture.startMulti(device: device.id, targets: targets)
             running = true
             status = "Listening to \(targetConfigs.count) channel(s) on \(device.name)"
+            if !skipped.isEmpty {
+                status += ". Skipped \(skipped.map(\.name).joined(separator: ", ")): input not on this device"
+            }
             startMeterTimer()
         } catch {
             capture.stop()
@@ -397,6 +416,9 @@ final class Model {
         guard !busy, deviceID != id else { return }
         deviceID = id
         refreshDevices()
+        if let uid = device?.uid, !uid.isEmpty {
+            UserDefaults.standard.set(uid, forKey: Self.savedDeviceKey)
+        }
         if running {
             busy = true
             Task {
@@ -461,6 +483,7 @@ final class Model {
 
     public func executeTrigger(rule: KeywordRule, channelName: String? = nil, channelIndex: Int? = nil) {
         var actionDesc = ""
+        var sent = true
 
         // Dynamic MIDI channel routing: if followAudioChannel is true, route to MIDI channel matching audio input
         let resolveChannel: (UInt8) -> UInt8 = { defaultCh in
@@ -473,30 +496,30 @@ final class Model {
         switch rule.action {
         case .midiNoteOn(let ch, let note, let vel):
             let targetCh = resolveChannel(ch)
-            midiEngine.sendNoteOn(channel: targetCh, note: note, velocity: vel)
+            sent = midiEngine.sendNoteOn(channel: targetCh, note: note, velocity: vel)
             actionDesc = "MIDI Note On (Ch:\(targetCh + 1) Note:\(note) Vel:\(vel))"
 
         case .midiNoteOff(let ch, let note, let vel):
             let targetCh = resolveChannel(ch)
-            midiEngine.sendNoteOff(channel: targetCh, note: note, velocity: vel)
+            sent = midiEngine.sendNoteOff(channel: targetCh, note: note, velocity: vel)
             actionDesc = "MIDI Note Off (Ch:\(targetCh + 1) Note:\(note) Vel:\(vel))"
 
         case .midiCC(let ch, let ctrl, let val):
             let targetCh = resolveChannel(ch)
-            midiEngine.sendControlChange(channel: targetCh, controller: ctrl, value: val)
+            sent = midiEngine.sendControlChange(channel: targetCh, controller: ctrl, value: val)
             actionDesc = "MIDI CC (Ch:\(targetCh + 1) CC:\(ctrl) Val:\(val))"
 
         case .midiProgramChange(let ch, let prog):
             let targetCh = resolveChannel(ch)
-            midiEngine.sendProgramChange(channel: targetCh, program: prog)
+            sent = midiEngine.sendProgramChange(channel: targetCh, program: prog)
             actionDesc = "MIDI Program Change (Ch:\(targetCh + 1) Prog:\(prog))"
 
         case .midiMSC(let devID, let cmdFormat, let cmd, let cueNum, let cueList):
-            midiEngine.sendMSC(deviceID: devID, commandFormat: cmdFormat, command: cmd, cueNumber: cueNum, cueList: cueList)
+            sent = midiEngine.sendMSC(deviceID: devID, commandFormat: cmdFormat, command: cmd, cueNumber: cueNum, cueList: cueList)
             actionDesc = "MIDI Show Control (Dev:\(devID) Cue:\(cueNum ?? "-"))"
 
         case .wingLampFlash:
-            midiEngine.flashWINGLamp()
+            sent = midiEngine.flashWINGLamp()
             actionDesc = "WING lamp: Ch 6, CC 16, flash 3s then off"
 
         case .flashWindow:
@@ -504,9 +527,10 @@ final class Model {
             triggerFlashAlert()
         }
 
+        let failure = sent ? nil : (midiEngine.lastError ?? "MIDI send failed")
         let item = TriggerLogItem(
             ruleKeyword: rule.keyword,
-            description: actionDesc,
+            description: failure.map { "NOT SENT (\($0)): \(actionDesc)" } ?? actionDesc,
             channelName: channelName
         )
         triggerLogs.insert(item, at: 0)
@@ -516,7 +540,13 @@ final class Model {
         }
 
         let chLabel = channelName.map { "[\($0)] " } ?? ""
-        lastTriggerBanner = "\(chLabel)Fired rule '\(rule.keyword)': \(actionDesc)"
+        if let failure {
+            lastTriggerBanner = "\(chLabel)Heard '\(rule.keyword)' but nothing was sent: \(failure)"
+            lastTriggerFailed = true
+        } else {
+            lastTriggerBanner = "\(chLabel)Fired rule '\(rule.keyword)': \(actionDesc)"
+            lastTriggerFailed = false
+        }
     }
 
     public func testRule(_ rule: KeywordRule) {
@@ -558,7 +588,29 @@ final class Model {
         UserDefaults.standard.removeObject(forKey: "LiveCueRecentDocumentPaths")
     }
 
+    /// Offers to save unsaved work. Returns true when it's OK to go on
+    /// (saved or discarded), false when the user cancelled.
+    func confirmDiscardChanges(action: String) -> Bool {
+        guard hasUnsavedChanges else { return true }
+        let alert = NSAlert()
+        alert.messageText = "Save changes to \(documentDisplayName)?"
+        alert.informativeText = "The transcript and activity log will be lost if you \(action) without saving."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: "Cancel")
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            save()
+            return !hasUnsavedChanges
+        case .alertSecondButtonReturn:
+            return true
+        default:
+            return false
+        }
+    }
+
     public func newSession() {
+        guard confirmDiscardChanges(action: "start a new session") else { return }
         resetTranscript()
         for i in 0..<channelStates.count {
             channelStates[i].partial = ""
@@ -639,6 +691,7 @@ final class Model {
     }
 
     public func openURL(_ url: URL) {
+        guard confirmDiscardChanges(action: "open another session") else { return }
         do {
             let data = try Data(contentsOf: url)
             let decoder = JSONDecoder()

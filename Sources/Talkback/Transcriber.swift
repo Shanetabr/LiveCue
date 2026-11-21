@@ -112,13 +112,19 @@ final class Transcriber {
         }
     }
 
-    /// Lets the engine settle what it has heard, then ends cleanly without hanging.
+    /// Lets the engine settle what it has heard, delivers that last result, then
+    /// ends cleanly. The reader is only cancelled if the engine hangs (3 s).
     func finish() async {
         reportError = nil
         feed.finish()
-        reading?.cancel()
-        _ = await reading?.result
+        let reader = reading
         reading = nil
+        let watchdog = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            reader?.cancel()
+        }
         try? await analyzer.finalizeAndFinishThroughEndOfInput()
+        _ = await reader?.result
+        watchdog.cancel()
     }
 }

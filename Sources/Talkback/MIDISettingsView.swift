@@ -85,6 +85,12 @@ struct MIDISettingsView: View {
                             Button("LAMP ON") { model.midiEngine.setWINGLamp(on: true) }
                             Button("LAMP OFF") { model.midiEngine.setWINGLamp(on: false) }
                             Button("FLASH 3 SECONDS") { model.midiEngine.flashWINGLamp() }
+                            Divider().frame(height: 16)
+                            OpenStatusButton(model: model, runTest: true, title: "TEST CONNECTION")
+                            Button("GET BRIDGE INSTALLER") { model.connectionTest.perform(.getBridgeInstaller) }
+                        }
+                        if let message = model.connectionTest.installerMessage {
+                            Text(message).font(.caption).foregroundStyle(.secondary)
                         }
                         Text("Last sent: \(model.midiEngine.lastSentMIDI)").font(.system(.caption, design: .monospaced))
                         Picker("Network receive port", selection: Bindable(model.midiEngine).selectedNetworkInputID) {

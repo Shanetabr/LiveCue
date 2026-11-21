@@ -3,6 +3,7 @@ import SwiftUI
 
 struct LiveCueApp: App {
     @State private var model = Model()
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
     var body: some Scene {
         WindowGroup {
@@ -10,8 +11,19 @@ struct LiveCueApp: App {
                 .onOpenURL { url in
                     model.openURL(url)
                 }
+                .onAppear { appDelegate.model = model }
         }
         .commands {
+            CommandMenu("Connection") {
+                OpenStatusButton(model: model, runTest: true, title: "Test Connection")
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
+                OpenStatusButton(model: model, title: "Status Window")
+                    .keyboardShortcut("i", modifiers: [.command])
+                Divider()
+                Button("Get Bridge Installer for the Audio MacBook") {
+                    model.connectionTest.perform(.getBridgeInstaller)
+                }
+            }
             CommandGroup(replacing: .newItem) {
                 Button("New Session") {
                     model.newSession()
@@ -52,6 +64,11 @@ struct LiveCueApp: App {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             }
         }
+
+        Window("LiveCue Status", id: "status") {
+            StatusView(model: model)
+        }
+        .defaultSize(width: 600, height: 680)
     }
 }
 

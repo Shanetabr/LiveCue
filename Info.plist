@@ -2,36 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>LiveCue</string>
 	<key>CFBundleDisplayName</key>
 	<string>LiveCue</string>
-	<key>CFBundleIdentifier</key>
-	<string>local.livecue.app</string>
-	<key>CFBundleExecutable</key>
-	<string>LiveCue</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.2.0</string>
-	<key>CFBundleVersion</key>
-	<string>4</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>26.0</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>LiveCue listens to the input you choose and transcribes spoken comms in real-time.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>LiveCue turns speech into text locally on this Mac. Nothing is sent anywhere.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>LiveCue needs local network access to discover and send MIDI to show control devices.</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_apple-midi._udp</string>
-	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -47,18 +19,46 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>LiveCue</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.livecue.app</string>
+	<key>CFBundleName</key>
+	<string>LiveCue</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.3.0</string>
+	<key>CFBundleVersion</key>
+	<string>5</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_apple-midi._udp</string>
+	</array>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>LiveCue needs local network access to discover and send MIDI to show control devices.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LiveCue listens to the input you choose and transcribes spoken comms in real-time.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>LiveCue turns speech into text locally on this Mac. Nothing is sent anywhere.</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>local.livecue.session</string>
-			<key>UTTypeDescription</key>
-			<string>LiveCue Session Document</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.json</string>
 				<string>public.data</string>
 			</array>
+			<key>UTTypeDescription</key>
+			<string>LiveCue Session Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>local.livecue.session</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>

@@ -5,12 +5,18 @@
 // Rescans when MIDI setup changes and every 5 s, so a replugged WING or a reconnected
 // network session is picked up. Sends lamp OFF when it exits.
 //
-// Usage: wing-lamp-bridge [--source TEXT] [--dest A,B] [--flash] [--list]
+// Connection test (v1.1): LiveCue sends a ping SysEx  F0 7D 4C 43 01 <nonce> F7
+// over the network session. The bridge answers on every network destination with
+//   F0 7D 4C 43 02 <nonce> <wing 0/1> <major> <minor> F7
+// (0x7D = non-commercial ID, 4C 43 = "LC"). Pings are never forwarded to the WING.
+//
+// Usage: wing-lamp-bridge [--source TEXT] [--dest A,B] [--flash] [--list] [--version]
 //   --flash  send a 3 s flash directly to the WING and exit (local USB test)
 //   --list   print MIDI sources and destinations and exit
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreMIDI/CoreMIDI.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdatomic.h>
@@ -20,6 +26,8 @@
 #include <unistd.h>
 
 #define MAX_SRC 16
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 1
 
 static const char *srcMatch = "Network";
 static const char *destMatch = "WING,Port 4";
@@ -28,9 +36,15 @@ static MIDIPortRef inPort, outPort;
 static _Atomic MIDIEndpointRef dest;
 static MIDIEndpointRef connected[MAX_SRC];
 static int nConnected;
-static atomic_ulong received, lampCmds, sendsOK;
+static MIDIEndpointRef replyTo[MAX_SRC];   // network destinations, for ping replies
+static int nReplyTo;
+static pthread_mutex_t replyLock = PTHREAD_MUTEX_INITIALIZER;
+static atomic_ulong received, lampCmds, sendsOK, pings;
 
-typedef struct { unsigned char status, data0; int count; } Parser;
+typedef struct {
+    unsigned char status, data0; int count;
+    int inSysex; unsigned char sx[16]; int sxLen;
+} Parser;
 static Parser parsers[MAX_SRC];
 
 static void logf_(const char *fmt, ...) {
@@ -66,7 +80,25 @@ static OSStatus sendLamp(unsigned char value) {
     return MIDISend(outPort, d, &list);
 }
 
-// Same parser as WINGLampReceiver: handles running status, skips realtime and SysEx.
+static void sendBytes(MIDIEndpointRef d, const unsigned char *bytes, int n) {
+    MIDIPacketList list; MIDIPacket *p = MIDIPacketListInit(&list);
+    MIDIPacketListAdd(&list, sizeof list, p, 0, n, bytes);
+    MIDISend(outPort, d, &list);
+}
+
+// A complete SysEx body (without F0/F7). Answers LiveCue's connection-test ping.
+static void handleSysex(const unsigned char *sx, int n) {
+    if (n != 5 || sx[0] != 0x7D || sx[1] != 0x4C || sx[2] != 0x43 || sx[3] != 0x01) return;
+    unsigned char reply[10] = {0xF0, 0x7D, 0x4C, 0x43, 0x02, sx[4] & 0x7F,
+                               atomic_load(&dest) ? 1 : 0, VERSION_MAJOR, VERSION_MINOR, 0xF7};
+    pthread_mutex_lock(&replyLock);
+    for (int i = 0; i < nReplyTo; i++) sendBytes(replyTo[i], reply, sizeof reply);
+    pthread_mutex_unlock(&replyLock);
+    atomic_fetch_add(&pings, 1);
+}
+
+// Same parser as WINGLampReceiver: handles running status, skips realtime.
+// SysEx is collected only to answer pings; it is never forwarded.
 static void readProc(const MIDIPacketList *list, void *portRef, void *srcRef) {
     Parser *ps = &parsers[(long)srcRef % MAX_SRC];
     const MIDIPacket *pk = &list->packet[0];
@@ -75,6 +107,12 @@ static void readProc(const MIDIPacketList *list, void *portRef, void *srcRef) {
         for (UInt16 j = 0; j < pk->length; j++) {
             unsigned char b = pk->data[j];
             if (b >= 0xF8) continue;
+            if (b == 0xF0) { ps->inSysex = 1; ps->sxLen = 0; ps->status = 0; ps->count = 0; continue; }
+            if (b == 0xF7) { if (ps->inSysex) handleSysex(ps->sx, ps->sxLen); ps->inSysex = 0; continue; }
+            if (ps->inSysex) {
+                if (!(b & 0x80)) { if (ps->sxLen < (int)sizeof ps->sx) ps->sx[ps->sxLen] = b; ps->sxLen++; continue; }
+                ps->inSysex = 0;  // a status byte ends a broken SysEx
+            }
             if (b & 0x80) { ps->status = b < 0xF0 ? b : 0; ps->count = 0; continue; }
             if (!ps->status) continue;
             if (ps->count == 0) {
@@ -106,6 +144,14 @@ static void rescan(void) {
         if (found) logf_("WING output: %s", foundName); else logf_("WING output missing (looking for \"%s\")", destMatch);
     }
 
+    pthread_mutex_lock(&replyLock);
+    nReplyTo = 0;
+    for (ItemCount i = 0; i < MIDIGetNumberOfDestinations() && nReplyTo < MAX_SRC; i++) {
+        MIDIEndpointRef e = MIDIGetDestination(i); name(e, buf, sizeof buf);
+        if (containsCI(buf, srcMatch)) replyTo[nReplyTo++] = e;
+    }
+    pthread_mutex_unlock(&replyLock);
+
     MIDIEndpointRef want[MAX_SRC]; int nWant = 0;
     for (ItemCount i = 0; i < MIDIGetNumberOfSources() && nWant < MAX_SRC; i++) {
         MIDIEndpointRef e = MIDIGetSource(i); name(e, buf, sizeof buf);
@@ -133,8 +179,8 @@ static void notifyProc(const MIDINotification *n, void *ref) {
 static void timerProc(CFRunLoopTimerRef t, void *info) { rescan(); }
 
 static void heartbeat(CFRunLoopTimerRef t, void *info) {
-    logf_("alive: received %lu, lamp commands %lu, USB sends accepted %lu",
-          atomic_load(&received), atomic_load(&lampCmds), atomic_load(&sendsOK));
+    logf_("alive: received %lu, lamp commands %lu, USB sends accepted %lu, test pings answered %lu",
+          atomic_load(&received), atomic_load(&lampCmds), atomic_load(&sendsOK), atomic_load(&pings));
 }
 
 static void onSignal(int sig) {
@@ -158,7 +204,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--dest") && i + 1 < argc) destMatch = argv[++i];
         else if (!strcmp(argv[i], "--flash")) flash = 1;
         else if (!strcmp(argv[i], "--list")) list = 1;
-        else { fprintf(stderr, "usage: %s [--source TEXT] [--dest A,B] [--flash] [--list]\n", argv[0]); return 2; }
+        else if (!strcmp(argv[i], "--version")) { printf("WING Lamp Bridge %d.%d\n", VERSION_MAJOR, VERSION_MINOR); return 0; }
+        else { fprintf(stderr, "usage: %s [--source TEXT] [--dest A,B] [--flash] [--list] [--version]\n", argv[0]); return 2; }
     }
 
     OSStatus s = MIDIClientCreate(CFSTR("WING Lamp Bridge"), notifyProc, NULL, &client);
@@ -177,7 +224,7 @@ int main(int argc, char **argv) {
     }
 
     signal(SIGTERM, onSignal); signal(SIGINT, onSignal);
-    logf_("WING Lamp Bridge started (source \"%s\", output \"%s\")", srcMatch, destMatch);
+    logf_("WING Lamp Bridge %d.%d started (source \"%s\", output \"%s\")", VERSION_MAJOR, VERSION_MINOR, srcMatch, destMatch);
     CFRunLoopAddTimer(CFRunLoopGetCurrent(),
         CFRunLoopTimerCreate(NULL, CFAbsoluteTimeGetCurrent() + 5, 5, 0, 0, timerProc, NULL), kCFRunLoopCommonModes);
     CFRunLoopAddTimer(CFRunLoopGetCurrent(),

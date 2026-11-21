@@ -107,7 +107,7 @@ struct ContentView: View {
         }
         .background(abletonBg)
         .preferredColorScheme(.dark)
-        .frame(minWidth: 840, minHeight: 520)
+        .frame(minWidth: 1020, minHeight: 560)
         .navigationTitle(model.documentTitle)
         .sheet(isPresented: $showingExportSheet) {
             ExportSheet(model: model, isPresented: $showingExportSheet)
@@ -277,6 +277,9 @@ struct ContentView: View {
 
             Spacer()
 
+            // Connection test + status window
+            TopBarStatusButtons(model: model)
+
             // Save Session Button
             Button {
                 model.save()
@@ -332,6 +335,7 @@ struct ContentView: View {
                     Text(model.running ? "STOP" : "START")
                         .font(.system(size: 13, weight: .heavy, design: .monospaced))
                 }
+                .fixedSize()
                 .foregroundStyle(model.running ? .white : .black)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
@@ -380,9 +384,9 @@ struct ContentView: View {
 
     private func triggerBanner(_ banner: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: "bolt.fill")
+            Image(systemName: model.lastTriggerFailed ? "exclamationmark.triangle.fill" : "bolt.fill")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(abletonAmber)
+                .foregroundStyle(model.lastTriggerFailed ? abletonRed : abletonAmber)
             Text(banner)
                 .font(.system(size: 13, weight: .bold, design: .monospaced))
                 .foregroundStyle(.white)
@@ -398,8 +402,8 @@ struct ContentView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(red: 0.32, green: 0.20, blue: 0.04))
-        .overlay(Rectangle().frame(height: 1).foregroundStyle(abletonAmber.opacity(0.6)), alignment: .bottom)
+        .background(model.lastTriggerFailed ? Color(red: 0.35, green: 0.08, blue: 0.08) : Color(red: 0.32, green: 0.20, blue: 0.04))
+        .overlay(Rectangle().frame(height: 1).foregroundStyle((model.lastTriggerFailed ? abletonRed : abletonAmber).opacity(0.6)), alignment: .bottom)
     }
 
     // MARK: - Ableton Session View Channel Strip
@@ -596,7 +600,7 @@ struct ContentView: View {
         .overlay(RoundedRectangle(cornerRadius: 4).stroke(badgeColor.opacity(0.3), lineWidth: 1))
     }
 
-    // MARK: - Ableton Status Bar
+    // MARK: - Status Bar
 
     private var statusBar: some View {
         HStack(spacing: 14) {
@@ -633,6 +637,19 @@ struct ContentView: View {
                     .foregroundStyle(Color(white: 0.5))
             }
 
+            if model.midiEngine.selectedUSBOutput == 0 {
+                TimelineView(.periodic(from: .now, by: 2)) { _ in
+                    let online = model.midiEngine.bridgeOnline
+                    HStack(spacing: 5) {
+                        Circle().fill(online ? abletonMint : abletonAmber).frame(width: 6, height: 6)
+                        Text(online ? "BRIDGE ONLINE" : "BRIDGE NOT ANSWERING")
+                            .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                            .foregroundStyle(online ? abletonMint : abletonAmber)
+                    }
+                    .help(online ? "The lamp bridge on the audio MacBook is answering." : "The audio MacBook's lamp bridge isn't answering. Open Connection → Test Connection.")
+                }
+            }
+
             if model.midiEngine.selectedUSBOutput == 0 ? model.midiEngine.networkPortAvailable : model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }) {
                 HStack(spacing: 5) {
                     Circle().fill(abletonMint).frame(width: 6, height: 6)
@@ -653,5 +670,46 @@ struct ContentView: View {
         .padding(.vertical, 6)
         .background(abletonSurface)
         .overlay(Rectangle().frame(height: 1).foregroundStyle(abletonBorder), alignment: .top)
+    }
+}
+
+/// TEST and STATUS buttons in the top bar. TEST opens the Status window and runs
+/// Test Connection.
+struct TopBarStatusButtons: View {
+    @Environment(\.openWindow) private var openWindow
+    var model: Model
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                openWindow(id: "status")
+                model.connectionTest.run()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "checklist").font(.system(size: 11, weight: .bold))
+                    Text("TEST").font(.system(size: 11, weight: .bold, design: .monospaced))
+                }
+            }
+            .help("Test Connection: checks this Mac, the network, the audio MacBook bridge and the WING lamp (⇧⌘T)")
+
+            Button {
+                openWindow(id: "status")
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "gauge.with.dots.needle.33percent").font(.system(size: 11, weight: .bold))
+                    Text("STATUS").font(.system(size: 11, weight: .bold, design: .monospaced))
+                }
+            }
+            .help("Open the Status window (⌘I)")
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color(red: 0.19, green: 0.19, blue: 0.19))
+        .cornerRadius(4)
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(red: 0.28, green: 0.28, blue: 0.28), lineWidth: 1))
     }
 }

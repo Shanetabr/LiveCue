@@ -4,6 +4,8 @@ import Foundation
 /// One CoreAudio device with full input/output channel counts and specs.
 public struct InputDevice: Identifiable, Hashable, Sendable {
     public let id: AudioDeviceID
+    /// Stable across reboots and replugs, unlike `id`. Empty if CoreAudio has none.
+    public var uid: String = ""
     public let name: String
     public let inputChannels: Int
     public let outputChannels: Int
@@ -48,8 +50,22 @@ public enum AudioDevices {
             guard inCh > 0 else { return nil }
             let outCh = outputChannels(id)
             let sRate = sampleRate(id)
-            return InputDevice(id: id, name: name(id), inputChannels: inCh, outputChannels: outCh, sampleRate: sRate)
+            var device = InputDevice(id: id, name: name(id), inputChannels: inCh, outputChannels: outCh, sampleRate: sRate)
+            device.uid = uid(id)
+            return device
         }
+    }
+
+    public static func uid(_ id: AudioDeviceID) -> String {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &uid) == noErr, let uid else { return "" }
+        return uid.takeRetainedValue() as String
     }
 
     public static func defaultInput() -> AudioDeviceID? {

@@ -60,6 +60,18 @@ start when the Mac powers on, turn on automatic login for that user in
 System Preferences → Users & Groups → Login Options → Automatic login.
 FileVault must be off for automatic login to be available.
 
+## Connection test (version 1.1)
+
+LiveCue 1.3's **Test Connection** button and Status window ask the bridge
+"are you there?" over the network. Version 1.1 answers with whether it can
+see WING Port 4. The question is never sent to the WING. Version 1.0 still
+flashes the lamp but can't answer, so LiveCue shows "bridge not answering"
+until you install 1.1. Installing over 1.0 replaces it. Run
+`wing-lamp-bridge --version` to see which one is installed.
+
+LiveCue carries this installer inside it: **Connection → Get Bridge Installer
+for the Audio MacBook** saves the zip to Downloads.
+
 ## Check it
 
 - **Test Lamp Flash.command**: lists the MIDI ports, then flashes the lamp for
