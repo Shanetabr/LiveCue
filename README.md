@@ -150,7 +150,7 @@ three seconds. Console and receiving-Mac setup is in
 **WING Lamp Bridge** (separate install, for the Mac plugged into the WING):
 a background version of that helper with no window. It starts at login and
 forwards only the lamp control. It doesn't need LiveCue on that Mac.
-[**Download WINGLampBridge.zip**](https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.0.0/WINGLampBridge.zip),
+[**Download WINGLampBridge.zip**](https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.1.0/WINGLampBridge.zip),
 then see [`tools/WINGLampBridge`](tools/WINGLampBridge/README.md) to install it.
 
 ## Status

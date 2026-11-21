@@ -18,7 +18,7 @@ Enable **Custom Controls (RX Only) → USB** in WING Setup → MIDI.
 
 **Recommended receiving-Mac bridge:** install
 [WING Lamp Bridge](../tools/WINGLampBridge/README.md)
-([download](https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.0.0/WINGLampBridge.zip)).
+([download](https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.1.0/WINGLampBridge.zip)).
 It runs in the background with no window, starts at login, and forwards only
 the lamp control to WING Port 4. It doesn't need LiveCue on that Mac, and it
 works on macOS 11 and later. Set **both** Audio MIDI Setup Live routings to
