@@ -19,7 +19,17 @@ usual. Works on macOS 11 and later, Intel and Apple Silicon.
 
 ## Get the zip
 
-Build it on any Mac with Xcode's command line tools (the stage Mac is fine):
+**Download:** [WINGLampBridge.zip](https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.0.0/WINGLampBridge.zip)
+([release page](https://github.com/Shanetabr/LiveCue/releases/tag/wing-lamp-bridge-v1.0.0)).
+It's ready to install, with nothing to build.
+
+Or download it in Terminal on the audio MacBook. That way macOS doesn't ask
+about it when you open it:
+
+    curl -L -o ~/Desktop/WINGLampBridge.zip https://github.com/Shanetabr/LiveCue/releases/download/wing-lamp-bridge-v1.0.0/WINGLampBridge.zip
+    cd ~/Desktop && unzip -o WINGLampBridge.zip
+
+To build it yourself instead, use any Mac with Xcode's command line tools:
 
     sh tools/WINGLampBridge/build.sh     # -> tools/WINGLampBridge/dist/WINGLampBridge.zip
 
