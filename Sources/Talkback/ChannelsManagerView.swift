@@ -263,10 +263,18 @@ struct ChannelsManagerView: View {
 
                 Spacer()
 
-                // Ableton LED Segmented VU Meter (always visible, active when running)
+                // Input gain: works while listening, saved with the channel.
                 if channel.isEnabled {
-                    AbletonVULevelMeter(level: model.running ? (state?.level ?? 0) : 0)
-                        .frame(width: 100, height: 16)
+                    GainControl(gainDB: channel.gainDB) { model.setGain($0, for: channel.id) }
+                }
+
+                // Level meter (after gain) with clip warnings
+                if channel.isEnabled {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        AbletonVULevelMeter(level: model.running ? (state?.level ?? 0) : 0)
+                            .frame(width: 100, height: 16)
+                        ClipBadge(state: state, running: model.running)
+                    }
                 }
 
                 // Edit Button
@@ -359,8 +367,9 @@ struct AbletonVULevelMeter: View {
             let h = geo.size.height
 
             // Ableton pro-audio dynamic range: -60 dB to 0 dB with +12dB meter sensitivity boost for laptop/USB inputs
-            let boosted = level * 4.0
-            let db = 20 * log10(max(boosted, 0.00001))
+            // True dBFS, -60 to 0. Earlier versions added +12 dB here, which made
+            // normal speech look like it was clipping.
+            let db = 20 * log10(max(level, 0.00001))
             let norm = max(0, min(1, (db + 60) / 60))
             let activeSegments: Int = {
                 if level < 0.0001 { return 0 }
@@ -376,10 +385,12 @@ struct AbletonVULevelMeter: View {
 
                 for i in 0..<segCount {
                     let isLit = i < activeSegments
+                    // Segment's top edge in dBFS: red only above -3 dB, amber from -12 to -3.
+                    let segmentTopDB = -60 + 60 * Double(i + 1) / Double(segCount)
                     let color: Color = {
-                        if i >= segCount - 2 { return Color(red: 1.0, green: 0.25, blue: 0.25) }     // Peak Red
-                        if i >= segCount - 5 { return Color(red: 1.0, green: 0.70, blue: 0.15) }     // Amber
-                        return Color(red: 0.0, green: 0.90, blue: 0.46)                             // Mint Green
+                        if segmentTopDB > -3 { return Color(red: 1.0, green: 0.25, blue: 0.25) }    // Near clipping
+                        if segmentTopDB > -12 { return Color(red: 1.0, green: 0.70, blue: 0.15) }   // Loud
+                        return Color(red: 0.0, green: 0.90, blue: 0.46)                             // Good
                     }()
 
                     let x = CGFloat(i) * (segWidth + gap)
@@ -510,7 +521,8 @@ struct ChannelEditSheet: View {
                         name: name.trimmingCharacters(in: .whitespaces),
                         colorHex: selectedColorHex,
                         channelIndex: channelIndex,
-                        isEnabled: initialChannel?.isEnabled ?? true
+                        isEnabled: initialChannel?.isEnabled ?? true,
+                        gainDB: initialChannel?.gainDB ?? 0
                     )
                     onSave(ch)
                 }
@@ -548,5 +560,76 @@ extension Color {
         let b = Double(rgb & 0x0000FF) / 255.0
 
         self.init(red: r, green: g, blue: b)
+    }
+}
+
+// MARK: - Gain
+
+/// A gain slider (−24…+24 dB) with a readout and a 0 dB reset.
+struct GainControl: View {
+    let gainDB: Double
+    let onChange: (Double) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text("GAIN")
+                .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                .foregroundStyle(Color(white: 0.55))
+            Slider(value: Binding(get: { gainDB }, set: { onChange($0) }),
+                   in: ChannelConfig.gainRange, step: 0.5)
+                .frame(width: 130)
+                .help("Turn down if the meter hits red; turn up if it barely moves. Works while listening.")
+            Text(Self.label(gainDB))
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(gainDB == 0 ? Color(white: 0.7) : Color(red: 1.0, green: 0.65, blue: 0.10))
+                .frame(width: 58, alignment: .trailing)
+            Button("0") { onChange(0) }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(white: 0.75))
+                .frame(width: 20, height: 18)
+                .background(Color(white: 0.16))
+                .cornerRadius(3)
+                .help("Reset gain to 0 dB")
+                .disabled(gainDB == 0)
+        }
+    }
+
+    static func label(_ dB: Double) -> String {
+        if dB == 0 { return "0 dB" }
+        let text = dB == dB.rounded() ? String(Int(dB)) : String(format: "%.1f", dB)
+        return (dB > 0 ? "+" : "") + text + " dB"
+    }
+}
+
+/// "CLIP" when the level after gain hits full scale; "INPUT CLIPPING" when the
+/// signal was already clipped before LiveCue (turn it down at the source).
+struct ClipBadge: View {
+    let state: ChannelState?
+    let running: Bool
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { context in
+            let now = context.date
+            if running, let state, state.inputClipping(at: now) {
+                Text("INPUT CLIPPING")
+                    .font(.system(size: 8, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Color(red: 1.0, green: 0.25, blue: 0.25))
+                    .cornerRadius(2)
+                    .help("The signal is already clipping before it reaches LiveCue. Turn it down on the WING / Dante send; LiveCue's gain can't undo it.")
+            } else if running, let state, state.clipping(at: now) {
+                Text("CLIP")
+                    .font(.system(size: 8, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Color(red: 1.0, green: 0.25, blue: 0.25))
+                    .cornerRadius(2)
+                    .help("Too loud after gain. Turn the gain down.")
+            } else {
+                Text(" ").font(.system(size: 8))
+            }
+        }
     }
 }

@@ -18,13 +18,30 @@ public struct ChannelConfig: Identifiable, Codable, Equatable, Sendable {
     public var colorHex: String
     public var channelIndex: Int // 0-based
     public var isEnabled: Bool
+    /// Input gain applied before speech recognition, in dB (-24…+24). 0 = unchanged.
+    public var gainDB: Double = 0
 
-    public init(id: UUID = UUID(), name: String, colorHex: String = "#F2994A", channelIndex: Int = 0, isEnabled: Bool = true) {
+    public static let gainRange: ClosedRange<Double> = -24...24
+
+    public init(id: UUID = UUID(), name: String, colorHex: String = "#F2994A", channelIndex: Int = 0, isEnabled: Bool = true, gainDB: Double = 0) {
         self.id = id
         self.name = name
         self.colorHex = colorHex
         self.channelIndex = channelIndex
         self.isEnabled = isEnabled
+        self.gainDB = gainDB
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        colorHex = try c.decode(String.self, forKey: .colorHex)
+        channelIndex = try c.decode(Int.self, forKey: .channelIndex)
+        isEnabled = try c.decode(Bool.self, forKey: .isEnabled)
+        // Channels saved before gain existed load at 0 dB.
+        let gain = try c.decodeIfPresent(Double.self, forKey: .gainDB) ?? 0
+        gainDB = min(max(gain, Self.gainRange.lowerBound), Self.gainRange.upperBound)
     }
 }
 

@@ -81,6 +81,23 @@ func reusedMonoBufferDoesNotOverwriteQueuedAudio() throws {
     expect(feeder.peak == 0.75)
 }
 
+func gainScalesAndClipsWhatTheSpeechEngineHears() throws {
+    let format = try require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1))
+    let input = try require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 480))
+    input.frameLength = 480
+    for i in 0..<480 { input.floatChannelData![0][i] = 0.5 }
+    let feeder = ChannelFeeder(channel: 0, target: format, gainDB: -6)
+    let quieter = try require(feeder.feed(input))
+    expect(abs(feeder.peak - 0.2506) < 0.001 && feeder.sourcePeak == 0.5)        // −6 dB ≈ ×0.501
+    expect(abs(quieter.floatChannelData![0][100] - 0.2506) < 0.001)
+    feeder.setGain(dB: 12)                                                       // live change, pushes past full scale
+    let louder = try require(feeder.feed(input))
+    expect(feeder.peak == 1.0 && louder.floatChannelData![0][100] == 1.0)        // clipped at full scale, not above
+    feeder.setGain(dB: 0)
+    _ = try require(feeder.feed(input))
+    expect(feeder.peak == 0.5)
+}
+
 func invalidInputDoesNotSilentlyReadAnotherChannel() throws {
     let format = try require(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
     let buffer = try require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 64))
@@ -96,6 +113,7 @@ func invalidInputDoesNotSilentlyReadAnotherChannel() throws {
         try await liveAudioOverflowClosesQueueAndReportsFailure()
         try reusedMonoBufferDoesNotOverwriteQueuedAudio()
         try invalidInputDoesNotSilentlyReadAnotherChannel()
-        print("Passed: 20,000-line preservation and bounded window, archive failure, 1,000-buffer overload, audio buffer ownership")
+        try gainScalesAndClipsWhatTheSpeechEngineHears()
+        print("Passed: 20,000-line preservation and bounded window, archive failure, 1,000-buffer overload, audio buffer ownership, input gain and clipping")
     }
 }

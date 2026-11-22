@@ -14,14 +14,19 @@ final class ChannelFeeder: @unchecked Sendable {
     private var monoBuffer: AVAudioPCMBuffer?
 
     private var _peak: Float = 0
+    private var _sourcePeak: Float = 0
+    private var _gain: Float = 1
     private var lock = os_unfair_lock()
 
-    init(channel: Int, target: AVAudioFormat) {
+    init(channel: Int, target: AVAudioFormat, gainDB: Double = 0) {
         self.channel = channel
         self.target = target
+        self._gain = Self.linear(gainDB)
     }
 
-    /// The loudest sample of the last buffer, 0 to 1.
+    static func linear(_ dB: Double) -> Float { Float(pow(10, dB / 20)) }
+
+    /// The loudest sample of the last buffer after gain, 0 to 1 (what the speech engine hears).
     var peak: Float {
         os_unfair_lock_lock(&lock)
         let val = _peak
@@ -29,9 +34,32 @@ final class ChannelFeeder: @unchecked Sendable {
         return val
     }
 
-    private func setPeak(_ val: Float) {
+    /// The loudest sample of the last buffer before gain, straight from the device.
+    var sourcePeak: Float {
         os_unfair_lock_lock(&lock)
-        _peak = val
+        let val = _sourcePeak
+        os_unfair_lock_unlock(&lock)
+        return val
+    }
+
+    /// Changes the gain; safe to call while audio is running.
+    func setGain(dB: Double) {
+        os_unfair_lock_lock(&lock)
+        _gain = Self.linear(dB)
+        os_unfair_lock_unlock(&lock)
+    }
+
+    private var gain: Float {
+        os_unfair_lock_lock(&lock)
+        let val = _gain
+        os_unfair_lock_unlock(&lock)
+        return val
+    }
+
+    private func setPeaks(_ after: Float, _ before: Float) {
+        os_unfair_lock_lock(&lock)
+        _peak = after
+        _sourcePeak = before
         os_unfair_lock_unlock(&lock)
     }
 
@@ -57,15 +85,24 @@ final class ChannelFeeder: @unchecked Sendable {
         let stride = buffer.format.isInterleaved ? Int(buffer.format.channelCount) : 1
         let source = buffer.format.isInterleaved ? data[0] + ch : data[ch]
         let dest = one.floatChannelData![0]
-        var top: Float = 0
         if stride == 1 {
             dest.update(from: source, count: frames)
         } else {
             for i in 0..<frames { dest[i] = source[i * stride] }
         }
-        vDSP_maxmgv(source, vDSP_Stride(stride), &top, vDSP_Length(frames))
+        var before: Float = 0
+        vDSP_maxmgv(source, vDSP_Stride(stride), &before, vDSP_Length(frames))
+        var g = gain
+        if g != 1 {
+            // Apply gain, then clip at full scale like real hardware would.
+            vDSP_vsmul(dest, 1, &g, dest, 1, vDSP_Length(frames))
+            var low: Float = -1, high: Float = 1
+            vDSP_vclip(dest, 1, &low, &high, dest, 1, vDSP_Length(frames))
+        }
+        var after: Float = 0
+        vDSP_maxmgv(dest, 1, &after, vDSP_Length(frames))
         one.frameLength = buffer.frameLength
-        setPeak(top)
+        setPeaks(after, before)
 
         let capacity = AVAudioFrameCount(Double(frames) * target.sampleRate / mono.sampleRate) + 64
         guard let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return nil }
@@ -98,12 +135,14 @@ public struct ChannelTarget: @unchecked Sendable {
     public let channel: Int
     public let target: AVAudioFormat
     public let sink: AudioSink
+    public var gainDB: Double
 
-    public init(id: UUID, channel: Int, target: AVAudioFormat, sink: AudioSink) {
+    public init(id: UUID, channel: Int, target: AVAudioFormat, sink: AudioSink, gainDB: Double = 0) {
         self.id = id
         self.channel = channel
         self.target = target
         self.sink = sink
+        self.gainDB = gainDB
     }
 }
 
@@ -211,7 +250,7 @@ public final class AudioCapture: @unchecked Sendable {
         var bindings: [FeederBinding] = []
 
         for target in targets {
-            let feeder = ChannelFeeder(channel: target.channel, target: target.target)
+            let feeder = ChannelFeeder(channel: target.channel, target: target.target, gainDB: target.gainDB)
             map[target.id] = feeder
             bindings.append(FeederBinding(feeder: feeder, sink: target.sink))
         }
@@ -273,6 +312,25 @@ public final class AudioCapture: @unchecked Sendable {
         let feeder = feederMap[channelID]
         os_unfair_lock_unlock(&lock)
         return feeder?.peak ?? 0
+    }
+
+    /// The channel's level before gain (straight from the device), 0.0 to 1.0.
+    public func sourcePeak(for channelID: UUID) -> Float {
+        os_unfair_lock_lock(&lock)
+        let feeder = feederMap[channelID]
+        os_unfair_lock_unlock(&lock)
+        return feeder?.sourcePeak ?? 0
+    }
+
+    /// Changes a running channel's gain immediately, and keeps it for restarts.
+    public func setGain(dB: Double, for channelID: UUID) {
+        os_unfair_lock_lock(&lock)
+        let feeder = feederMap[channelID]
+        os_unfair_lock_unlock(&lock)
+        feeder?.setGain(dB: dB)
+        if let i = currentTargets.firstIndex(where: { $0.id == channelID }) {
+            currentTargets[i].gainDB = dB
+        }
     }
 
     /// Reads the overall peak volume across all active channels.

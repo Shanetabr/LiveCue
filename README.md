@@ -14,7 +14,7 @@ show.
 
 ![LiveCue transcribing a comms channel live](docs/screenshot.png)
 
-[**Download LiveCue**](../../releases/latest) · [How it works](#how-it-works) · [Status](#status)
+[**Download LiveCue**](../../releases/latest) · [How it works](#how-it-works) · [Status](#status) · [Update log](CHANGELOG.md)
 
 ---
 
@@ -47,6 +47,9 @@ show.
   Bridge, the WING, and finally the lamp. It explains each problem in plain
   words. The Status window shows what's working right now. LiveCue checks
   the bridge every 10 seconds, and the status bar shows BRIDGE ONLINE.
+- **Input gain per channel** (−24 to +24 dB, adjustable while listening), with
+  true-dBFS level meters, a **CLIP** badge, and an **INPUT CLIPPING** warning
+  when the signal is already distorted before it reaches LiveCue.
 - **Adjustable WING lamp flash**: presets (Quick blink, Pulse, Slow blink,
   Long flash) or your own time on, time off, number of flashes and
   brightness, with a preview of the pattern. It's used by the Front of House

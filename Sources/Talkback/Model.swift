@@ -207,7 +207,7 @@ final class Model {
         var newStates: [ChannelState] = []
         for ch in channels {
             let existing = channelStates.first(where: { $0.id == ch.id })
-            newStates.append(ChannelState(
+            var state = ChannelState(
                 id: ch.id,
                 name: ch.name,
                 colorHex: ch.colorHex,
@@ -216,7 +216,10 @@ final class Model {
                 level: existing?.level ?? 0,
                 partial: existing?.partial ?? "",
                 partialTime: existing?.partialTime ?? Date()
-            ))
+            )
+            state.lastClip = existing?.lastClip
+            state.lastInputClip = existing?.lastInputClip
+            newStates.append(state)
         }
         channelStates = newStates
     }
@@ -295,11 +298,31 @@ final class Model {
         let overall = input.peak
         level = max(overall, level * 0.82)
 
+        let now = Date()
         for i in 0..<channelStates.count {
             let chID = channelStates[i].id
-            let peak = capture.peak(for: chID)
+            let peak = capture.peak(for: chID)          // after gain: what the speech engine hears
             channelStates[i].level = max(peak, channelStates[i].level * 0.82)
+            if peak >= Self.clipLevel { channelStates[i].lastClip = now }
+            if capture.sourcePeak(for: chID) >= Self.clipLevel { channelStates[i].lastInputClip = now }
         }
+    }
+
+    /// Samples at or above this (−0.1 dBFS) count as clipping.
+    static let clipLevel: Float = 0.989
+
+    // MARK: - Gain
+
+    /// Sets a channel's input gain in dB (−24…+24). Takes effect immediately while
+    /// listening, and is saved with the channel.
+    func setGain(_ dB: Double, for channelID: UUID) {
+        guard let idx = channels.firstIndex(where: { $0.id == channelID }) else { return }
+        let range = ChannelConfig.gainRange
+        let value = (min(max(dB, range.lowerBound), range.upperBound) * 2).rounded() / 2   // 0.5 dB steps
+        guard channels[idx].gainDB != value else { return }
+        channels[idx].gainDB = value
+        capture.setGain(dB: value, for: channelID)
+        saveConfig()
     }
 
     // MARK: - Controls
@@ -389,7 +412,8 @@ final class Model {
                     id: config.id,
                     channel: config.channelIndex,
                     target: transcriber.format,
-                    sink: transcriber.audioSink
+                    sink: transcriber.audioSink,
+                    gainDB: config.gainDB
                 )
                 targets.append(target)
             }

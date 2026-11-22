@@ -451,8 +451,18 @@ struct ContentView: View {
                         }
 
                         if state.isEnabled {
-                            AbletonVULevelMeter(level: model.running ? state.level : 0)
-                                .frame(width: 44, height: 10)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                AbletonVULevelMeter(level: model.running ? state.level : 0)
+                                    .frame(width: 44, height: 10)
+                                let gain = model.channels.first { $0.id == state.id }?.gainDB ?? 0
+                                if state.clipping() || state.inputClipping() {
+                                    ClipBadge(state: state, running: model.running)
+                                } else if gain != 0 {
+                                    Text(GainControl.label(gain))
+                                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(Color(white: 0.6))
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 10)
