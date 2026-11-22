@@ -144,14 +144,15 @@ final class ConnectionTest {
     }
 
     private func flashAndAsk() async {
-        set("lamp", .running, "Flashing the lamp for 3 seconds…")
+        let pattern = midi.lampFlash
+        set("lamp", .running, "Flashing the lamp: \(pattern.summary)…")
         guard midi.flashWINGLamp() else {
             set("lamp", .failed, "Nothing could be sent: \(midi.lastError ?? "MIDI send failed").")
             finishedAt = Date()
             return
         }
-        try? await Task.sleep(for: .seconds(3.2))
-        set("lamp", .needsAnswer, "Flashed for 3 seconds, then turned off. Did you see the WING lamp flash?")
+        try? await Task.sleep(for: .seconds(pattern.totalSeconds + 0.3))
+        set("lamp", .needsAnswer, "Flashed (\(pattern.summary)), then turned off. Did you see the WING lamp flash?")
         finishedAt = Date()
     }
 

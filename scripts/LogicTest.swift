@@ -35,6 +35,22 @@ struct LogicTest {
         check(BridgePing.parseReply([0xB5, 0x10, 0x7F]) == nil, "lamp messages are not replies")
         check(BridgePing.isLiveCueSysEx(ping), "pings are recognised so they're never forwarded to a console")
 
+        // Lamp flash patterns
+        let d = LampFlashSettings.default
+        check(d.schedule.count == 12 && d.schedule.first?.on == true && d.schedule.last?.on == false,
+              "default pattern: 6 on/off pairs, starts ON, ends OFF")
+        check(abs(d.totalSeconds - 2.75) < 0.001 && abs((d.schedule.last?.time ?? 0) - 2.75) < 0.001, "default lasts 2.75 s")
+        let long = LampFlashSettings.presets.first { $0.name == "Long flash" }!.settings
+        check(long.schedule.count == 2 && long.schedule[1].time == 3.0, "Long flash: on for 3 s, then off")
+        let wild = LampFlashSettings(onSeconds: 0, offSeconds: 99, flashes: 500, brightness: 900).clamped
+        check(wild.onSeconds == 0.1 && wild.offSeconds == 5 && wild.flashes == 20 && wild.brightness == 127,
+              "out-of-range values are clamped to safe limits")
+        let old = try? JSONDecoder().decode(LampFlashSettings.self, from: Data("{\"onSeconds\": 2}".utf8))
+        check(old?.onSeconds == 2 && old?.flashes == 6 && old?.brightness == 127, "missing saved fields fall back to defaults")
+        check(d.summary == "6 flashes, 0.25 s on / 0.25 s off, 2.75 s in all", "summary reads plainly: \(d.summary)")
+        check(long.summary == "1 flash, 3 s on, 3 s in all", "single-flash summary: \(long.summary)")
+        check(d.presetName == "Quick blink" && LampFlashSettings(onSeconds: 0.3).presetName == nil, "presets are recognised, custom isn't")
+
         print(failures == 0 ? "All logic checks passed" : "\(failures) check(s) failed")
         exit(failures == 0 ? 0 : 1)
     }

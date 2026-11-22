@@ -263,7 +263,7 @@ struct KeywordRulesView: View {
             let l = list.map { "/\($0)" } ?? ""
             return "MSC: Dev \(dev), Fmt \(fmt), Cmd \(cmd), Cue \(c)\(l)"
         case .wingLampFlash:
-            return "WING Lamp: Ch 6, CC 16, flash 3s then off"
+            return "WING Lamp: \(model.midiEngine.lampFlash.summary), then off"
         case .flashWindow:
             return "Visual Alert (Flash Screen)"
         }
@@ -291,7 +291,7 @@ struct RuleEditSheet: View {
         case cc = "MIDI Control Change"
         case programChange = "MIDI Program Change"
         case msc = "MIDI Show Control (MSC)"
-        case wingLamp = "WING Lamp Flash (3 seconds)"
+        case wingLamp = "WING Lamp Flash"
         case flash = "Visual Alert"
 
         var id: String { rawValue }
@@ -414,7 +414,7 @@ struct RuleEditSheet: View {
                         TextField("Cue List (optional)", text: $mscCueList)
 
                     case .wingLamp:
-                        Text("Layer 2, encoder 1 must be assigned to Lamp Brightness. Enable Custom Controls USB on WING. Sends channel 6, CC 16: 127/0 every 250 ms for 3 seconds, then off.")
+                        Text("Plays the WING lamp flash pattern set in the Network MIDI tab, then turns the lamp off. On the WING, Layer 2 encoder 1 must be Lamp Brightness and Custom Controls must be on USB (channel 6, CC 16).")
                             .font(.caption)
                     case .flash:
                         Text("Flashes a high-visibility alert border across the LiveCue window.")

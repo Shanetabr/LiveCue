@@ -47,6 +47,10 @@ show.
   Bridge, the WING, and finally the lamp. It explains each problem in plain
   words. The Status window shows what's working right now. LiveCue checks
   the bridge every 10 seconds, and the status bar shows BRIDGE ONLINE.
+- **Adjustable WING lamp flash**: presets (Quick blink, Pulse, Slow blink,
+  Long flash) or your own time on, time off, number of flashes and
+  brightness, with a preview of the pattern. It's used by the Front of House
+  rule, the FLASH button and Test Connection, and always ends with the lamp off.
 - **Show files**: `.livecue` session documents with Save / Save As / Open
   Recent, holding transcript, channels, rules and the trigger log.
 - **Export** the transcript as TXT, CSV or SRT subtitles.

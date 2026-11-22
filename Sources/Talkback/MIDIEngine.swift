@@ -18,6 +18,93 @@ public struct MIDIUSBOutput: Identifiable, Equatable, Sendable {
     public let name: String
 }
 
+/// How the WING lamp flashes: on time, off time, number of flashes, brightness.
+/// Every pattern ends with the lamp OFF.
+public struct LampFlashSettings: Codable, Equatable, Sendable {
+    public var onSeconds: Double = 0.25
+    public var offSeconds: Double = 0.25
+    public var flashes: Int = 6
+    public var brightness: Int = 127   // CC value sent for "on", 1-127
+
+    public static let `default` = LampFlashSettings()
+
+    public struct Preset: Identifiable, Sendable {
+        public let name: String
+        public let settings: LampFlashSettings
+        public var id: String { name }
+    }
+    public static let presets: [Preset] = [
+        Preset(name: "Quick blink", settings: LampFlashSettings(onSeconds: 0.25, offSeconds: 0.25, flashes: 6)),
+        Preset(name: "Pulse", settings: LampFlashSettings(onSeconds: 0.5, offSeconds: 0.5, flashes: 4)),
+        Preset(name: "Slow blink", settings: LampFlashSettings(onSeconds: 1.0, offSeconds: 0.5, flashes: 3)),
+        Preset(name: "Long flash", settings: LampFlashSettings(onSeconds: 3.0, offSeconds: 0.5, flashes: 1)),
+    ]
+
+    public init(onSeconds: Double = 0.25, offSeconds: Double = 0.25, flashes: Int = 6, brightness: Int = 127) {
+        self.onSeconds = onSeconds
+        self.offSeconds = offSeconds
+        self.flashes = flashes
+        self.brightness = brightness
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = LampFlashSettings.default
+        onSeconds = try c.decodeIfPresent(Double.self, forKey: .onSeconds) ?? d.onSeconds
+        offSeconds = try c.decodeIfPresent(Double.self, forKey: .offSeconds) ?? d.offSeconds
+        flashes = try c.decodeIfPresent(Int.self, forKey: .flashes) ?? d.flashes
+        brightness = try c.decodeIfPresent(Int.self, forKey: .brightness) ?? d.brightness
+    }
+
+    /// Values kept inside safe ranges (0.1-5 s, 1-20 flashes, 1-127).
+    public var clamped: LampFlashSettings {
+        LampFlashSettings(onSeconds: min(max(onSeconds, 0.1), 5),
+                          offSeconds: min(max(offSeconds, 0.1), 5),
+                          flashes: min(max(flashes, 1), 20),
+                          brightness: min(max(brightness, 1), 127))
+    }
+
+    /// Seconds from the first ON to the final OFF.
+    public var totalSeconds: Double {
+        let s = clamped
+        return Double(s.flashes) * s.onSeconds + Double(s.flashes - 1) * s.offSeconds
+    }
+
+    /// (time in seconds, lamp on?) for every message. Starts ON, ends OFF.
+    public var schedule: [(time: Double, on: Bool)] {
+        let s = clamped
+        var steps: [(time: Double, on: Bool)] = []
+        for i in 0..<s.flashes {
+            let start = Double(i) * (s.onSeconds + s.offSeconds)
+            steps.append((start, true))
+            steps.append((start + s.onSeconds, false))
+        }
+        return steps
+    }
+
+    /// The preset this matches, if any.
+    public var presetName: String? {
+        Self.presets.first { $0.settings.onSeconds == onSeconds && $0.settings.offSeconds == offSeconds
+            && $0.settings.flashes == flashes }?.name
+    }
+
+    /// e.g. "6 flashes, 0.25 s on / 0.25 s off, 2.8 s in all"
+    public var summary: String {
+        let s = clamped
+        let flashesText = s.flashes == 1 ? "1 flash, \(Self.fmt(s.onSeconds)) on" :
+            "\(s.flashes) flashes, \(Self.fmt(s.onSeconds)) on / \(Self.fmt(s.offSeconds)) off"
+        return "\(flashesText), \(Self.fmt(totalSeconds)) in all"
+    }
+
+    /// 0.25 → "0.25 s", 0.5 → "0.5 s", 3 → "3 s"
+    static func fmt(_ seconds: Double) -> String {
+        var text = String(format: "%.2f", seconds)
+        while text.hasSuffix("0") { text.removeLast() }
+        if text.hasSuffix(".") { text.removeLast() }
+        return text + " s"
+    }
+}
+
 /// The WING Lamp Bridge's answer to a connection-test ping (bridge v1.1+).
 public struct BridgeReply: Equatable, Sendable {
     public let wingFound: Bool
@@ -443,27 +530,33 @@ public final class MIDIEngine {
     // A single task owns the lamp so repeated cues cannot interleave on/off messages.
     private var lampFlashTask: Task<Void, Never>?
 
-    /// Starts a 3-second flash. Returns false if the first message couldn't be sent.
+    /// The saved flash pattern used by rules, the FLASH button and Test Connection.
+    public var lampFlash = LampFlashSettings.default
+
+    /// True while a flash pattern is playing.
+    public var isLampFlashing: Bool { lampFlashTask != nil }
+
+    /// Plays a flash pattern (the saved one by default). Always ends OFF.
+    /// Returns false if the first message couldn't be sent.
     @discardableResult
-    public func flashWINGLamp() -> Bool {
+    public func flashWINGLamp(_ pattern: LampFlashSettings? = nil) -> Bool {
+        let settings = (pattern ?? lampFlash).clamped
+        let value = UInt8(settings.brightness)
         lampFlashTask?.cancel()
-        guard sendControlChange(channel: 5, controller: 16, value: 127) else { lampFlashTask = nil; return false }
+        guard sendControlChange(channel: 5, controller: 16, value: value) else { lampFlashTask = nil; return false }
         lampFlashTask = Task { @MainActor [weak self] in
             let clock = ContinuousClock()
             let start = clock.now
             do {
-                // Six half-second flashes; use absolute deadlines to avoid timing drift.
-                for step in 1...11 {
-                    try await clock.sleep(until: start.advanced(by: .milliseconds(step * 250)))
+                // Absolute deadlines so long patterns don't drift.
+                for step in settings.schedule.dropFirst() {
+                    try await clock.sleep(until: start.advanced(by: .milliseconds(Int((step.time * 1000).rounded()))))
                     try Task.checkCancellation()
-                    self?.sendControlChange(channel: 5, controller: 16, value: step.isMultiple(of: 2) ? 127 : 0)
+                    self?.sendControlChange(channel: 5, controller: 16, value: step.on ? value : 0)
                 }
-                try await clock.sleep(until: start.advanced(by: .seconds(3)))
-                try Task.checkCancellation()
-                self?.sendControlChange(channel: 5, controller: 16, value: 0)
                 self?.lampFlashTask = nil
             } catch {
-                // A replacement flash owns the lamp after cancellation.
+                // A replacement flash (or LAMP OFF) owns the lamp after cancellation.
             }
         }
         return true

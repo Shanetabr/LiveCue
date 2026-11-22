@@ -33,6 +33,8 @@ public struct AppConfig: Codable, Sendable {
     public var manualMIDIDestinations: [ManualMIDIDestinationConfig]
     public var selectedMIDIDestinationIDs: [String]
     public var channels: [ChannelConfig]
+    /// WING lamp flash pattern; nil in configs saved before 1.4.1 (uses the default).
+    public var lampFlash: LampFlashSettings? = nil
 
     public static let maxChannelsLimit = 6
 

@@ -6,9 +6,12 @@ Operator notes for the WING lamp preset, network MIDI and Dante input.
 
 In Keyword Rules, click **WING FOH PRESET**. This adds a case-insensitive
 contains-phrase rule with a 3.2-second cooldown. Its Test button and spoken
-“Front of House” send MIDI channel **6**, CC **16**, alternating **127 / 0**
-every 250 ms for three seconds, ending at **0** (off). Retriggering restarts
-the three-second sequence. The mapping matches Layer 2, encoder 1 assigned
+“Front of House” send MIDI channel **6**, CC **16**, playing the **flash
+pattern** set in Network MIDI → WING LAMP. The default is six quick blinks,
+0.25 s on and 0.25 s off. Presets: Quick blink, Pulse, Slow blink, and Long
+flash (on for 3 s). Sliders set the time on, the time off and the brightness,
+and a stepper sets the number of flashes (1–20). The pattern always ends at
+**0** (off), and retriggering restarts it. The mapping matches Layer 2, encoder 1 assigned
 to OTHER → LAMP BRIGHTNESS in the supplied console photos.
 
 Connect this app's Network MIDI destination to the receiving Mac's enabled

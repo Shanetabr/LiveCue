@@ -188,6 +188,7 @@ final class Model {
     func loadConfig() {
         let config = configManager.load()
         keywordMatcher.rules = config.rules
+        midiEngine.lampFlash = config.lampFlash ?? .default
         // Enforce max 6 channels limit
         channels = Array(config.channels.prefix(AppConfig.maxChannelsLimit))
         syncChannelStates()
@@ -230,7 +231,8 @@ final class Model {
             rules: keywordMatcher.rules,
             manualMIDIDestinations: manualDests,
             selectedMIDIDestinationIDs: Array(midiEngine.selectedDestinationIDs),
-            channels: Array(channels.prefix(AppConfig.maxChannelsLimit))
+            channels: Array(channels.prefix(AppConfig.maxChannelsLimit)),
+            lampFlash: midiEngine.lampFlash
         )
         configManager.save(config)
     }
@@ -520,7 +522,7 @@ final class Model {
 
         case .wingLampFlash:
             sent = midiEngine.flashWINGLamp()
-            actionDesc = "WING lamp: Ch 6, CC 16, flash 3s then off"
+            actionDesc = "WING lamp: \(midiEngine.lampFlash.summary), then off"
 
         case .flashWindow:
             actionDesc = "Visual Alert"

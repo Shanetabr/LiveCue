@@ -83,6 +83,16 @@ struct NetworkMIDITest {
         precondition(silent == nil, "no reply means nil")
         print("PASS: bridge ping out, reply in, no reply times out")
 
+        // A custom flash pattern plays with its own timing and brightness, ending OFF.
+        let beforeFlash = capture.bytes.count
+        let quick = LampFlashSettings(onSeconds: 0.1, offSeconds: 0.1, flashes: 2, brightness: 64)
+        precondition(engine.flashWINGLamp(quick) && engine.isLampFlashing)
+        try await Task.sleep(for: .milliseconds(600))
+        let flashed = Array(capture.bytes.dropFirst(beforeFlash))
+        precondition(flashed == [0xB5, 0x10, 64, 0xB5, 0x10, 0, 0xB5, 0x10, 64, 0xB5, 0x10, 0], "flash bytes: \(flashed)")
+        precondition(!engine.isLampFlashing)
+        print("PASS: custom flash pattern (2 flashes, 50% brightness) played and ended OFF")
+
         // A rename must preserve the unique-ID selection and input subscription.
         precondition(MIDIObjectSetStringProperty(destination, kMIDIPropertyName, "Network Renamed virtual test output" as CFString) == noErr)
         engine.refreshMIDIPorts()
@@ -95,8 +105,9 @@ struct NetworkMIDITest {
         destination = 0
         engine.refreshMIDIPorts()
         precondition(engine.selectedNetworkOutputID == outputID && !engine.networkPortAvailable)
+        let sentBefore = engine.sentMessageCount
         engine.sendControlChange(channel: 5, controller: 16, value: 127)
-        precondition(engine.sentMessageCount == 2)
+        precondition(engine.sentMessageCount == sentBefore)
         precondition(engine.lastError?.contains("unavailable") == true)
 
         // Likewise, a missing USB selection must remain a failed USB route.
@@ -104,7 +115,7 @@ struct NetworkMIDITest {
         engine.refreshMIDIPorts()
         precondition(engine.selectedUSBOutput == MIDIEndpointRef.max)
         engine.sendControlChange(channel: 5, controller: 16, value: 127)
-        precondition(engine.sentMessageCount == 2)
+        precondition(engine.sentMessageCount == sentBefore)
         precondition(engine.lastError?.contains("USB output is unavailable") == true)
         print("PASS: enumerated network send/receive, selection after rename, and no fallback after disconnection")
     }

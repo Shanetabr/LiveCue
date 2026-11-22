@@ -10,224 +10,27 @@ private let abletonBorder = Color(red: 0.28, green: 0.28, blue: 0.28)
 private let abletonMint = Color(red: 0.0, green: 0.90, blue: 0.46)     // #00E575
 private let abletonAmber = Color(red: 1.0, green: 0.65, blue: 0.10)    // #FFA71A
 
+/// Network MIDI tab: where cues go, the WING lamp and its flash pattern,
+/// and everything technical folded under Advanced.
 struct MIDISettingsView: View {
     var model: Model
     @State private var testChannel: Int = 1
+    @State private var showAdvanced = false
+
+    private var midi: MIDIEngine { model.midiEngine }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Ableton Header bar
-            HStack {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(model.midiEngine.networkPortAvailable ? abletonMint : Color.gray)
-                        .frame(width: 8, height: 8)
-                    Text("NETWORK MIDI SESSION ROUTING")
-                        .font(.system(size: 15, weight: .heavy, design: .monospaced))
-                        .foregroundStyle(.white)
-                }
-
-                Spacer()
-
-                Button {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Audio MIDI Setup.app"))
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "network")
-                        Text("AUDIO MIDI SETUP")
-                    }
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(abletonMint)
-                    .foregroundStyle(.black)
-                    .cornerRadius(4)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(abletonSurface)
-            .overlay(Rectangle().frame(height: 1).foregroundStyle(abletonBorder), alignment: .bottom)
+            header
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("WING OUTPUT & LAMP TEST").font(.headline)
-                        Picker("Send to", selection: Bindable(model.midiEngine).selectedUSBOutput) {
-                            Text("Network MIDI session (stage Mac)").tag(MIDIEndpointRef(0))
-                            ForEach(model.midiEngine.usbOutputs) { output in
-                                Text(output.name).tag(output.id)
-                            }
-                            if model.midiEngine.selectedUSBOutput != 0,
-                               !model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }) {
-                                Text("Selected WING USB port unavailable").tag(model.midiEngine.selectedUSBOutput)
-                            }
-                        }
-                        if model.midiEngine.selectedUSBOutput == 0 {
-                            Picker("Local network output", selection: Bindable(model.midiEngine).selectedNetworkOutputID) {
-                                Text("Choose a network port").tag(Optional<MIDIUniqueID>.none)
-                                ForEach(model.midiEngine.networkOutputs) { output in
-                                    Text(output.name).tag(Optional(output.id))
-                                }
-                                if let id = model.midiEngine.selectedNetworkOutputID,
-                                   !model.midiEngine.networkOutputs.contains(where: { $0.id == id }) {
-                                    Text("Selected network port unavailable").tag(Optional(id))
-                                }
-                            }
-                        }
-                        Button("Refresh MIDI ports") { model.midiEngine.refreshMIDIPorts() }
-                        Text("On the stage Mac, select its local network output. Connect the audio Mac as a participant in Audio MIDI Setup.")
-                            .font(.caption)
-                        Text("For direct USB, select WING Port 4 / MIDI Control. These buttons send channel 6, CC 16 to Layer 2 encoder 1 assigned to Lamp Brightness.")
-                            .font(.caption)
-                        HStack {
-                            Button("LAMP ON") { model.midiEngine.setWINGLamp(on: true) }
-                            Button("LAMP OFF") { model.midiEngine.setWINGLamp(on: false) }
-                            Button("FLASH 3 SECONDS") { model.midiEngine.flashWINGLamp() }
-                            Divider().frame(height: 16)
-                            OpenStatusButton(model: model, runTest: true, title: "TEST CONNECTION")
-                            Button("GET BRIDGE INSTALLER") { model.connectionTest.perform(.getBridgeInstaller) }
-                        }
-                        if let message = model.connectionTest.installerMessage {
-                            Text(message).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Text("Last sent: \(model.midiEngine.lastSentMIDI)").font(.system(.caption, design: .monospaced))
-                        Picker("Network receive port", selection: Bindable(model.midiEngine).selectedNetworkInputID) {
-                            Text("Choose a network port").tag(Optional<MIDIUniqueID>.none)
-                            ForEach(model.midiEngine.networkInputs) { input in
-                                Text(input.name).tag(Optional(input.id))
-                            }
-                            if let id = model.midiEngine.selectedNetworkInputID,
-                               !model.midiEngine.networkInputs.contains(where: { $0.id == id }) {
-                                Text("Selected network port unavailable").tag(Optional(id))
-                            }
-                        }
-                        Toggle("Bridge incoming Network MIDI to selected WING USB output", isOn: Bindable(model.midiEngine).bridgeNetworkToUSB)
-                            .disabled(!model.midiEngine.usbOutputs.contains(where: { $0.id == model.midiEngine.selectedUSBOutput }))
-                        Text("Use this bridge only when LiveCue runs on the Mac plugged into the WING. For a separate audio Mac (macOS 11+), install WING Lamp Bridge from the LiveCue releases page instead. Leave both Audio MIDI Setup Live routings blank while any bridge is on.")
-                            .font(.caption)
-                        Text("Network received: \(model.midiEngine.receivedNetworkMessages) • Forwarded to USB: \(model.midiEngine.forwardedMessages)")
-                        Text("Last received: \(model.midiEngine.lastReceivedMIDI)").font(.system(.caption, design: .monospaced))
+                VStack(alignment: .leading, spacing: 14) {
+                    sendToCard
+                    lampCard
+                    if let err = midi.lastError {
+                        errorBanner(err)
                     }
-                    .padding(14)
-                    .background(abletonCard)
-                    .cornerRadius(6)
-
-                    // Status Banner
-                    HStack(spacing: 14) {
-                        Image(systemName: model.midiEngine.networkPortAvailable ? "network" : "network.slash")
-                            .font(.system(size: 26))
-                            .foregroundStyle(model.midiEngine.networkPortAvailable ? abletonMint : Color(white: 0.5))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(model.midiEngine.networkPortAvailable ? "LOCAL NETWORK MIDI PORT AVAILABLE" : "SELECT AN AVAILABLE NETWORK MIDI PORT")
-                                .font(.system(size: 13, weight: .heavy, design: .monospaced))
-                                .foregroundStyle(model.midiEngine.networkPortAvailable ? abletonMint : .white)
-                            Text("Check connected participants in Audio MIDI Setup. A local port being available does not confirm delivery to the audio Mac or WING.")
-                                .font(.caption)
-                                .foregroundStyle(Color(white: 0.65))
-                        }
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(abletonCard)
-                    .cornerRadius(6)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonBorder, lineWidth: 1))
-
-                    Text("CoreMIDI accepted messages: \(model.midiEngine.sentMessageCount). This confirms local sending, not receipt by the WING.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let err = model.midiEngine.lastError {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(abletonAmber)
-                            Text(err)
-                                .font(.system(size: 12, design: .monospaced))
-                                .foregroundStyle(abletonAmber)
-                        }
-                        .padding(10)
-                        .background(abletonAmber.opacity(0.12))
-                        .cornerRadius(6)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonAmber.opacity(0.3), lineWidth: 1))
-                    }
-
-                    // Destinations List
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("DISCOVERED & SAVED NETWORK HOSTS")
-                            .font(.system(size: 11, weight: .heavy, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.6))
-
-                        if model.midiEngine.destinations.isEmpty {
-                            VStack(spacing: 8) {
-                                Text("Scanning local network for Bonjour Apple-MIDI hosts (_apple-midi._udp)…")
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(Color(white: 0.7))
-                                Text("Add or connect a remote host in Audio MIDI Setup’s Network window.")
-                                    .font(.caption)
-                                    .foregroundStyle(Color(white: 0.5))
-                            }
-                            .padding(20)
-                            .frame(maxWidth: .infinity)
-                            .background(abletonCard.opacity(0.6))
-                            .cornerRadius(6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonBorder, lineWidth: 1))
-                        } else {
-                            Text("Host discovery does not establish a connection. Connect the required participant in Audio MIDI Setup.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            VStack(spacing: 8) {
-                                ForEach(model.midiEngine.destinations) { dest in
-                                    destinationRow(dest)
-                                }
-                            }
-                        }
-                    }
-
-                    Divider().background(abletonBorder)
-
-                    // Quick Test Section
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("QUICK MIDI TEST (CUE CONTROL)")
-                            .font(.system(size: 11, weight: .heavy, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.6))
-
-                        HStack(spacing: 12) {
-                            Button("SEND NOTE ON (C4 / 60)") {
-                                model.midiEngine.sendNoteOn(channel: UInt8(testChannel - 1), note: 60, velocity: 127)
-                            }
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(abletonCard)
-                            .cornerRadius(4)
-                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(abletonBorder, lineWidth: 1))
-
-                            Button("SEND NOTE OFF (C4 / 60)") {
-                                model.midiEngine.sendNoteOff(channel: UInt8(testChannel - 1), note: 60, velocity: 0)
-                            }
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.8))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(abletonCard)
-                            .cornerRadius(4)
-                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(abletonBorder, lineWidth: 1))
-
-                            Button("SEND MSC GO (CUE 1)") {
-                                model.midiEngine.sendMSC(deviceID: 1, commandFormat: 0x01, command: 0x01, cueNumber: "1")
-                            }
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(abletonMint)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(abletonCard)
-                            .cornerRadius(4)
-                            .overlay(RoundedRectangle(cornerRadius: 4).stroke(abletonMint.opacity(0.6), lineWidth: 1))
-                        }
-                    }
+                    advancedSection
                 }
                 .padding(16)
             }
@@ -235,45 +38,321 @@ struct MIDISettingsView: View {
         .background(abletonBg)
     }
 
-    private func destinationRow(_ dest: MIDIDestination) -> some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 8) {
-                    Text(dest.name)
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
+    // MARK: Header
 
-                    if dest.isManual {
-                        Text("MANUAL")
-                            .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.blue)
-                            .cornerRadius(3)
-                    } else {
-                        Text("BONJOUR")
-                            .font(.system(size: 9, weight: .heavy, design: .monospaced))
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(abletonMint)
-                            .cornerRadius(3)
-                    }
+    private var header: some View {
+        HStack {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(midi.networkPortAvailable ? abletonMint : Color.gray)
+                    .frame(width: 8, height: 8)
+                Text("NETWORK MIDI")
+                    .font(.system(size: 15, weight: .heavy, design: .monospaced))
+                    .foregroundStyle(.white)
+            }
+            Spacer()
+            OpenStatusButton(model: model, runTest: true, title: "TEST CONNECTION")
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(abletonMint).foregroundStyle(.black).cornerRadius(4)
+            Button {
+                NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Audio MIDI Setup.app"))
+            } label: {
+                Label("AUDIO MIDI SETUP", systemImage: "network")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(abletonCard).foregroundStyle(.white).cornerRadius(4)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(abletonBorder, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(abletonSurface)
+        .overlay(Rectangle().frame(height: 1).foregroundStyle(abletonBorder), alignment: .bottom)
+    }
 
+    // MARK: Send to
+
+    private var sendToCard: some View {
+        card("SEND TO") {
+            Picker("Send to", selection: Bindable(midi).selectedUSBOutput) {
+                Text("Network MIDI session (audio Mac and bridge)").tag(MIDIEndpointRef(0))
+                ForEach(midi.usbOutputs) { output in
+                    Text("\(output.name) (USB, this Mac)").tag(output.id)
                 }
+                if midi.selectedUSBOutput != 0, !midi.usbOutputs.contains(where: { $0.id == midi.selectedUSBOutput }) {
+                    Text("Selected WING USB port unavailable").tag(midi.selectedUSBOutput)
+                }
+            }
+            if midi.selectedUSBOutput == 0 {
+                HStack {
+                    Picker("Network session", selection: Bindable(midi).selectedNetworkOutputID) {
+                        Text("Choose a network session").tag(Optional<MIDIUniqueID>.none)
+                        ForEach(midi.networkOutputs) { output in
+                            Text(output.name).tag(Optional(output.id))
+                        }
+                        if let id = midi.selectedNetworkOutputID, !midi.networkOutputs.contains(where: { $0.id == id }) {
+                            Text("Selected session unavailable").tag(Optional(id))
+                        }
+                    }
+                    Button("Refresh") { midi.refreshMIDIPorts() }
+                }
+                TimelineView(.periodic(from: .now, by: 2)) { _ in
+                    statusLine(
+                        ok: midi.bridgeOnline,
+                        okText: "Bridge on the audio Mac is online\(midi.lastBridgeReply.map { $0.wingFound ? " and sees the WING" : ", but can't see the WING" } ?? "").",
+                        badText: midi.networkPortAvailable
+                            ? "The audio Mac's bridge isn't answering. Press TEST CONNECTION to find out why."
+                            : "No network session. Turn one on in Audio MIDI Setup and connect the audio Mac."
+                    )
+                }
+            } else {
+                let ok = midi.usbOutputs.contains { $0.id == midi.selectedUSBOutput }
+                statusLine(ok: ok, okText: "Sending straight to the WING over USB.",
+                           badText: "The WING USB port isn't connected. Check the cable and that the WING is on.")
+            }
+        }
+    }
 
-                Text("\(dest.address):\(dest.port)")
+    // MARK: WING lamp
+
+    private var lampCard: some View {
+        let flash = Bindable(midi).lampFlash
+        return card("WING LAMP") {
+            HStack(spacing: 8) {
+                bigButton(midi.isLampFlashing ? "FLASHING…" : "FLASH", color: abletonAmber) { midi.flashWINGLamp() }
+                bigButton("ON", color: Color(white: 0.85)) { midi.setWINGLamp(on: true) }
+                bigButton("OFF", color: Color(white: 0.85)) { midi.setWINGLamp(on: false) }
+                Spacer()
+                Text("Last sent: \(midi.lastSentMIDI)")
                     .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(Color(white: 0.6))
+                    .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Divider().background(abletonBorder)
 
+            HStack {
+                Text("Flash pattern").font(.system(size: 13, weight: .bold))
+                Spacer()
+                Text(midi.lampFlash.presetName ?? "Custom")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(abletonAmber)
+            }
+            HStack(spacing: 6) {
+                ForEach(LampFlashSettings.presets) { preset in
+                    let selected = midi.lampFlash.presetName == preset.name
+                    Button(preset.name) {
+                        var next = preset.settings
+                        next.brightness = midi.lampFlash.brightness
+                        midi.lampFlash = next
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(selected ? abletonAmber : abletonSurface)
+                    .foregroundStyle(selected ? .black : .white)
+                    .cornerRadius(4)
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(selected ? abletonAmber : abletonBorder, lineWidth: 1))
+                }
+            }
+
+            sliderRow("Light on", value: flash.onSeconds, range: 0.1...5, step: 0.05,
+                      label: LampFlashSettings.fmt(midi.lampFlash.onSeconds))
+            sliderRow("Light off between", value: flash.offSeconds, range: 0.1...5, step: 0.05,
+                      label: LampFlashSettings.fmt(midi.lampFlash.offSeconds))
+                .disabled(midi.lampFlash.flashes == 1)
+                .opacity(midi.lampFlash.flashes == 1 ? 0.45 : 1)
+            HStack {
+                Text("Flashes").frame(width: 130, alignment: .leading)
+                Stepper(value: flash.flashes, in: 1...20) {
+                    Text("\(midi.lampFlash.flashes)").font(.system(size: 13, weight: .bold, design: .monospaced))
+                }
+                Spacer()
+            }
+            sliderRow("Brightness", value: Binding(
+                get: { Double(midi.lampFlash.brightness) },
+                set: { midi.lampFlash.brightness = Int($0.rounded()) }),
+                range: 1...127, step: 1,
+                label: "\(Int((Double(midi.lampFlash.brightness) / 127 * 100).rounded()))%")
+
+            FlashPatternPreview(settings: midi.lampFlash)
+                .frame(height: 26)
+            HStack {
+                Text(midi.lampFlash.summary + ", then off.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(white: 0.75))
+                Spacer()
+                Button("Reset") { midi.lampFlash = .default }
+                    .disabled(midi.lampFlash == .default)
+            }
+            Text("Saved automatically. Used by the Front of House rule, the FLASH button and Test Connection. The lamp always ends off.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .padding(12)
+        .onChange(of: midi.lampFlash) { _, _ in model.saveConfig() }
+    }
+
+    // MARK: Advanced
+
+    private var advancedSection: some View {
+        DisclosureGroup(isExpanded: $showAdvanced) {
+            VStack(alignment: .leading, spacing: 14) {
+                card("RECEIVING") {
+                    Picker("Network receive port", selection: Bindable(midi).selectedNetworkInputID) {
+                        Text("Choose a network port").tag(Optional<MIDIUniqueID>.none)
+                        ForEach(midi.networkInputs) { input in
+                            Text(input.name).tag(Optional(input.id))
+                        }
+                        if let id = midi.selectedNetworkInputID, !midi.networkInputs.contains(where: { $0.id == id }) {
+                            Text("Selected network port unavailable").tag(Optional(id))
+                        }
+                    }
+                    Text("LiveCue hears the bridge's answers here. It normally matches the session you send on.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Toggle("Bridge incoming network MIDI to the selected WING USB output", isOn: Bindable(midi).bridgeNetworkToUSB)
+                        .disabled(!midi.usbOutputs.contains(where: { $0.id == midi.selectedUSBOutput }))
+                    Text("Only when LiveCue runs on the Mac plugged into the WING. A separate audio Mac uses WING Lamp Bridge instead. Keep Audio MIDI Setup's Live routings blank while any bridge is on.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Received: \(midi.receivedNetworkMessages) • Forwarded to USB: \(midi.forwardedMessages) • Sent: \(midi.sentMessageCount)")
+                        .font(.system(size: 11, design: .monospaced))
+                    Text("Last received: \(midi.lastReceivedMIDI)")
+                        .font(.system(size: 11, design: .monospaced))
+                }
+
+                card("AUDIO MAC BRIDGE") {
+                    HStack {
+                        Button("Get bridge installer") { model.connectionTest.perform(.getBridgeInstaller) }
+                        Spacer()
+                    }
+                    Text(model.connectionTest.installerMessage
+                         ?? "Saves WINGLampBridge.zip to Downloads, ready to copy to the audio Mac.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                card("MACS ON THE NETWORK") {
+                    if midi.advertisedHostNames.isEmpty {
+                        Text("No network MIDI sessions seen yet.")
+                            .font(.system(size: 12)).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(midi.advertisedHostNames, id: \.self) { name in
+                            HStack(spacing: 8) {
+                                Image(systemName: "desktopcomputer").foregroundStyle(abletonMint)
+                                Text(name).font(.system(size: 12, weight: .semibold))
+                                if name == MIDIEngine.thisMacName {
+                                    Text("this Mac").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    Text("Being seen doesn't mean connected. Connect Macs in Audio MIDI Setup → Network.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                card("QUICK MIDI TEST") {
+                    HStack(spacing: 10) {
+                        Button("Note On (C4)") { midi.sendNoteOn(channel: UInt8(testChannel - 1), note: 60, velocity: 127) }
+                        Button("Note Off (C4)") { midi.sendNoteOff(channel: UInt8(testChannel - 1), note: 60, velocity: 0) }
+                        Button("MSC GO cue 1") { midi.sendMSC(deviceID: 1, commandFormat: 0x01, command: 0x01, cueNumber: "1") }
+                        Spacer()
+                    }
+                    Text("Sends to the output chosen in Send to. The WING Lamp Bridge ignores these; they're for QLab or a lighting desk.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.top, 10)
+        } label: {
+            Text("ADVANCED")
+                .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                .foregroundStyle(Color(white: 0.6))
+        }
+    }
+
+    // MARK: Pieces
+
+    private func card<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 11, weight: .heavy, design: .monospaced))
+                .foregroundStyle(Color(white: 0.6))
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(abletonCard)
         .cornerRadius(6)
         .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonBorder, lineWidth: 1))
+    }
+
+    private func statusLine(ok: Bool, okText: String, badText: String) -> some View {
+        HStack(spacing: 8) {
+            Circle().fill(ok ? abletonMint : abletonAmber).frame(width: 8, height: 8)
+            Text(ok ? okText : badText)
+                .font(.system(size: 12))
+                .foregroundStyle(ok ? abletonMint : abletonAmber)
+        }
+    }
+
+    private func bigButton(_ title: String, color: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .heavy, design: .monospaced))
+                .frame(minWidth: 64)
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .background(color).foregroundStyle(.black).cornerRadius(4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sliderRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, label: String) -> some View {
+        HStack {
+            Text(title).frame(width: 130, alignment: .leading)
+            Slider(value: value, in: range, step: step)
+            Text(label)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .frame(width: 60, alignment: .trailing)
+        }
+    }
+
+    private func errorBanner(_ err: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(abletonAmber)
+            Text(err).font(.system(size: 12, design: .monospaced)).foregroundStyle(abletonAmber)
+            Spacer()
+        }
+        .padding(10)
+        .background(abletonAmber.opacity(0.12))
+        .cornerRadius(6)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(abletonAmber.opacity(0.3), lineWidth: 1))
+    }
+}
+
+/// A strip showing when the lamp is on (amber, by brightness) across the pattern.
+struct FlashPatternPreview: View {
+    let settings: LampFlashSettings
+
+    var body: some View {
+        let s = settings.clamped
+        let total = max(s.schedule.last?.time ?? 1, 0.1)
+        Canvas { context, size in
+            let back = Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 4)
+            context.fill(back, with: .color(Color(white: 0.13)))
+            let schedule = s.schedule
+            let alpha = 0.35 + 0.65 * Double(s.brightness) / 127
+            for i in stride(from: 0, to: schedule.count - 1, by: 2) {
+                let x0 = schedule[i].time / total * size.width
+                let x1 = schedule[i + 1].time / total * size.width
+                let rect = CGRect(x: x0, y: 3, width: max(2, x1 - x0), height: size.height - 6)
+                context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(abletonAmber.opacity(alpha)))
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            Text(LampFlashSettings.fmt(total))
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(white: 0.6))
+                .padding(.trailing, 4).padding(.bottom, 1)
+        }
+        .accessibilityLabel("Flash pattern: \(settings.summary)")
     }
 }
